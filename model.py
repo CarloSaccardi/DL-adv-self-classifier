@@ -2,9 +2,10 @@
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
-
-from self_classifier.src.utils import trunc_normal_
-
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), "self-classifier")) 
+from src.utils import trunc_normal_
 #In this file we will develop the model by using ResNet-18 as the backbone
 
 
