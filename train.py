@@ -42,7 +42,7 @@ def parser_func():
     parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18')
     parser.add_argument('--epochs', default=800, type=int, metavar='N',
                         help='number of total epochs to run')
-    parser.add_argument('-b', '--batch-size', default=256, type=int,
+    parser.add_argument('-b', '--batch-size', default=2, type=int,
                         metavar='N')
     parser.add_argument('--lr', '--learning-rate', default=4.8, type=float,
                         metavar='LR', help='initial learning rate', dest='lr')
@@ -147,9 +147,8 @@ def main():
     traindir = os.path.join(args.data, 'train')
     transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number)
     dataset = utils.ImageFolderWithIndices(traindir, transform=transform)
-
     loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
-
+    print(len(loader))
     criterion = Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps)
     
     # schedulers
@@ -197,6 +196,7 @@ def train(loader, model, criterion, optimizer, lr_schedule, epoch, args):#add sc
     model.train()
 
     end = time.time()
+    
     for i, (images, target, indices) in enumerate(loader):
         # measure data loading time
         data_time.update(time.time() - end)
