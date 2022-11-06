@@ -43,6 +43,14 @@ class GaussianBlur(object):
 
         return img.filter(ImageFilter.GaussianBlur(radius=random.uniform(self.radius_min, self.radius_max)))
 
+class ImageFolderWithIndices(datasets.ImageFolder):
+    def __getitem__(self, index):
+        # this is what ImageFolder normally returns
+        original_tuple = super(ImageFolderWithIndices, self).__getitem__(index)
+        # make a new tuple that includes original and the index
+        tuple_with_path = (original_tuple + (index,))
+        return tuple_with_path
+
 class Solarization(object):
     """
     Apply Solarization to the PIL image.

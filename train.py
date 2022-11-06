@@ -24,7 +24,10 @@ import torchvision.models as torchvision_models
 from torchsummary import summary
 import numpy as np
 import utils
-from torch.cpu.amp import autocast, GradScaler
+from torch.cpu.amp import autocast# GradScaler
+from model import Model
+# sys.path.append(os.path.join(os.path.dirname(__file__), "self-classifier")) 
+# from src.utils import *
 
 def parser_func():
     '''
@@ -34,8 +37,8 @@ def parser_func():
         args: The arguments
     '''
     parser = argparse.ArgumentParser(description='PyTorch ImageNet Self-Supervised Training')
-    parser.add_argument('data', metavar='DIR',
-                        help='path to dataset')
+    parser.add_argument('--data', metavar='DIR',
+                        help='path to dataset', default="./tiny_dataset")
     parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18')
     parser.add_argument('--epochs', default=800, type=int, metavar='N',
                         help='number of total epochs to run')
@@ -60,11 +63,11 @@ def parser_func():
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('--seed', default=0, type=int,
                         help='seed for initializing training. ')
-    parser.add_argument('--cls-size', type=int, default=[1000], nargs='+',
+    parser.add_argument('--cls-size', type=int, default=[5], nargs='+',
                         help='size of classification layer. can be a list if cls-size > 1')
     parser.add_argument('--num-cls', default=1, type=int, metavar='NCLS',
                         help='number of classification layers')
-    parser.add_argument('--save-path', default='../saved/', type=str,
+    parser.add_argument('--save-path', default='./saved/', type=str,
                         help='save path for checkpoints')
     parser.add_argument('--pretrained', default=None, type=str,
                         help='path to pretrained checkpoint')
@@ -82,6 +85,20 @@ def parser_func():
                         help='use a fixed classifier')
     parser.add_argument('--no-leaky', action='store_true',
                         help='use regular relu layers instead of leaky relu in MLP')
+    parser.add_argument('--row-tau', default=0.1, type=float,
+                    help='row softmax temperature (default: 0.1)')
+    parser.add_argument('--col-tau', default=0.05, type=float,
+                    help='column softmax temperature (default: 0.05)')
+    parser.add_argument('--eps', type=float, default=1e-12,
+                    help='small value to avoid division by zero and log(0)')
+    parser.add_argument('--final-lr', default=None, type=float,
+                    help='final learning rate (None for constant learning rate)')
+    parser.add_argument('--warmup-epochs', default=10, type=int,
+                    help='linear warmup epochs (default: 10)')
+    parser.add_argument('--start-warmup', default=0.3, type=float,
+                    help='initial warmup learning rate')
+    parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
+                    help='manual epoch number (useful on restarts)')
     parser.add_argument('--global-crops-scale', type=float, nargs='+', default=(0.4, 1.),
                         help="""Scale range of the cropped image before resizing, relatively to the origin image.
                         Used for large global view cropping. When disabling multi-crop (--local_crops_number 0), we 
@@ -143,12 +160,12 @@ def main():
                                                      warmup_epochs=args.warmup_epochs,
                                                      start_warmup_value=args.start_warmup)
 
-    scaler = GradScaler(enabled=args.use_amp, init_scale=2. ** 14)
+    #scaler = GradScaler(enabled=args.use_amp, init_scale=2. ** 14)
 
     for epoch in range(args.start_epoch, args.epochs):
 
         # train for one epoch
-        loss_i, acc1 = train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)
+        loss_i, acc1 = train(loader, model, criterion, optimizer, lr_schedule, epoch, args)#add scaler as input when using GPU
 
         # remember best acc@1 and save checkpoint
         is_best = True if epoch == 0 else loss_i < best_loss
@@ -168,7 +185,7 @@ def main():
 
 
 
-def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args):
+def train(loader, model, criterion, optimizer, lr_schedule, epoch, args):#add scaler as input when using GPU
     batch_time = utils.AverageMeter('Time', ':6.3f')
     data_time = utils.AverageMeter('Data', ':6.3f')
     losses = utils.AverageMeter('Loss', ':.4e')
@@ -199,9 +216,12 @@ def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)
         top1.update(acc1[0], images.size(0))
 
         # compute gradient and do SGD step
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
+        # scaler.scale(loss).backward()       
+        # scaler.step(optimizer)
+        # scaler.update() 
+        
+        loss.backward()
+        optimizer.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)

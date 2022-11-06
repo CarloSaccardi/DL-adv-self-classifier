@@ -46,7 +46,8 @@ class Model(nn.Module):
         # classification head
 
         #for cls_i in range(self.num_cls): --> this is the original code. Since we have only one task, we will not use a loop
-        
+        if len(self.cls_size)==1:
+            self.cls_size = self.cls_size[0]
         cls_layer_i = nn.utils.weight_norm(nn.Linear(dim, self.cls_size, bias=False))
         cls_layer_i.weight_g.data.fill_(1)
         setattr(self, "cls_0", cls_layer_i)
