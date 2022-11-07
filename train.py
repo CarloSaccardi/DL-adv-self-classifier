@@ -121,7 +121,6 @@ def main():
     
     
     base_model = torchvision_models.__dict__[args.arch]()
-    print(summary(base_model, (3, 224, 224)))
     backbone_dim = base_model.fc.weight.shape[1]
     
     model = Model(base_model=base_model,
@@ -148,7 +147,6 @@ def main():
     transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number)
     dataset = utils.ImageFolderWithIndices(traindir, transform=transform)
     loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
-    print(len(loader))
     criterion = Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps)
     
     # schedulers
@@ -207,13 +205,20 @@ def train(loader, model, criterion, optimizer, lr_schedule, epoch, args):#add sc
 
         # compute output
         with autocast(enabled=args.use_amp):
-            output = model(images)
-            loss = criterion(output, target, indices)
+
+            embds = model(images, return_embds=True)
+
+            probs = model(embds, return_embds=False)
+            with autocast(enabled=False):
+                # compute loss
+                loss = criterion(probs)
 
         # measure accuracy and record loss
-        acc1 = utils.accuracy(output, target, topk=(1,))
-        losses.update(loss.item(), images.size(0))
-        top1.update(acc1[0], images.size(0))
+        # acc1 = utils.accuracy(output, target, topk=(1,))
+        losses.update(loss.item(), probs[0][0].size(0))
+        batch_time.update(time.time() - end)
+        end = time.time()
+        # top1.update(acc1[0], images.size(0))
 
         # compute gradient and do SGD step
         # scaler.scale(loss).backward()       

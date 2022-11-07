@@ -17,21 +17,20 @@ class Loss(nn.Module):
 
         for cls_idx, cls_out in enumerate(out):  # classifiers
             # gather samples from all workers
-            cls_out = [utils.AllGather.apply(x).float() for x in cls_out]
-
+            # cls_out = [cls_out]
             const = cls_out[0].shape[0] / cls_out[0].shape[1]
             target = []
 
             for view_i_idx, view_i in enumerate(cls_out):
                 view_i_target = F.softmax(view_i / self.col_tau, dim=0)
-                view_i_target = utils.keep_current(view_i_target)
+                # view_i_target = utils.keep_current(view_i_target)
                 view_i_target = F.normalize(view_i_target, p=1, dim=1, eps=self.eps)
                 target.append(view_i_target)
 
             for view_j_idx, view_j in enumerate(cls_out):  # view j
                 view_j_pred = F.softmax(view_j / self.row_tau, dim=1)
                 view_j_pred = F.normalize(view_j_pred, p=1, dim=0, eps=self.eps)
-                view_j_pred = utils.keep_current(view_j_pred)
+                # view_j_pred = utils.keep_current(view_j_pred)
                 view_j_log_pred = th.log(const * view_j_pred + self.eps)
 
                 for view_i_idx, view_i_target in enumerate(target):

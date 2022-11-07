@@ -60,7 +60,6 @@ class Model(nn.Module):
     def forward(self, x, cls_num=None, return_embds=False):
         if isinstance(x, list):  # multiple views
             bs_size = x[0].shape[0]
-
             if return_embds:
                 # run backbone forward pass separately on each resolution input.
                 idx_crops = th.cumsum(th.unique_consecutive(th.Tensor([inp.shape[-1] for inp in x]), return_counts=True)[1], 0)
