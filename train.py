@@ -26,6 +26,7 @@ import numpy as np
 import utils
 from torch.cpu.amp import autocast# GradScaler
 from model import Model
+import matplotlib.pyplot as plt
 # sys.path.append(os.path.join(os.path.dirname(__file__), "self-classifier")) 
 # from src.utils import *
 
@@ -198,7 +199,12 @@ def train(loader, model, criterion, optimizer, lr_schedule, epoch, args):#add sc
     for i, (images, target, indices) in enumerate(loader):
         # measure data loading time
         data_time.update(time.time() - end)
-
+        """        
+        for i in range(len(images)):
+            img1 = images[i][1].permute(1, 2, 0).detach().cpu().numpy()
+            plt.imshow(img1)
+            plt.savefig(str(i)+"test.png")
+        """
         # adjust learning rate
         utils.adjust_lr(optimizer, lr_schedule, iteration=epoch * len(loader) + i)
         optimizer.zero_grad()
