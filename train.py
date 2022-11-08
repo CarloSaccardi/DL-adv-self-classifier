@@ -14,6 +14,9 @@ import random
 import shutil
 import time
 import sys
+import yaml
+import warnings
+import wandb
 
 from loss import Loss
 import torch
@@ -111,13 +114,17 @@ def parser_func():
     parser.add_argument('--local-crops-scale', type=float, nargs='+', default=(0.05, 0.4),
                         help="""Scale range of the cropped image before resizing, relatively to the origin image. 
                         Used for small local view cropping of multi-crop.""")
+    parser.add_argument('--config', type=float, nargs='+', default=(0.05, 0.4),
+                        help="""Scale range of the cropped image before resizing, relatively to the origin image. 
+                        Used for small local view cropping of multi-crop.""")
+    parser.add_argument("--local_config", default=None, help="config path")
+    parser.add_argument("--wandb", default=None, help="Specify project name to log using WandB")
 
     args = parser.parse_args()
-
+    
     return args
 
-def main():
-    args = parser_func()
+def main(args):
     print(args)
     
     
@@ -252,7 +259,23 @@ def save_checkpoint(state, is_best, is_milestone, filename):
         shutil.copyfile(filename, os.path.join(os.path.split(filename)[0], 'model_{}.pth.tar'.format(state['epoch'])))
         print('Milestone {} model was saved.'.format(state['epoch']))
 
+def update_args(args, config_dict):
+    for key, val in config_dict.items():
+        setattr(args, key, val)
 
 if __name__ == '__main__':
-    main()
+    
+    args = parser_func()
+    
+    if args.local_config is not None:
+        with open(args.config, "r") as f:
+            config = yaml.safe_load(f)
+        update_args(args, config)
+        if args.wandb:
+            wandb_config = vars(args)
+            run = wandb.init(project=args.wandb, entity="self-classifier", config=wandb_config)
+            # update_args(args, dict(run.config))
+    else:
+        warnings.warn("No config file was provided. Using default parameters.")
+    main(args)
 
