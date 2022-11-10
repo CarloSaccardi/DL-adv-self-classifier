@@ -27,7 +27,7 @@ import torchvision.models as torchvision_models
 from torchsummary import summary
 import numpy as np
 import utils
-from torch.cpu.amp import autocast# GradScaler
+from torch.cuda.amp import autocast# GradScaler
 from model import Model
 import matplotlib.pyplot as plt
 # sys.path.append(os.path.join(os.path.dirname(__file__), "self-classifier")) 
