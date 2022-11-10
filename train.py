@@ -171,7 +171,7 @@ def main(args):
 
         # train for one epoch
         loss_i, acc1 = train(loader, model, criterion, optimizer, lr_schedule, epoch, args)#add scaler as input when using GPU
-
+        wandb.log({"train_loss": loss_i, "train_acc": acc1})
         # remember best acc@1 and save checkpoint
         is_best = True if epoch == 0 else loss_i < best_loss
         best_loss = loss_i if epoch == 0 else min(loss_i, best_loss)
@@ -191,6 +191,7 @@ def main(args):
 
 
 def train(loader, model, criterion, optimizer, lr_schedule, epoch, args):#add scaler as input when using GPU
+    
     batch_time = utils.AverageMeter('Time', ':6.3f')
     data_time = utils.AverageMeter('Data', ':6.3f')
     losses = utils.AverageMeter('Loss', ':.4e')
