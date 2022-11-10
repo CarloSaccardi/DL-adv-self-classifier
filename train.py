@@ -268,12 +268,12 @@ if __name__ == '__main__':
     args = parser_func()
     
     if args.local_config is not None:
-        with open(args.config, "r") as f:
+        with open(str(args.local_config), "r") as f:
             config = yaml.safe_load(f)
         update_args(args, config)
         if args.wandb:
             wandb_config = vars(args)
-            run = wandb.init(project=args.wandb, entity="self-classifier", config=wandb_config)
+            run = wandb.init(project=str(args.wandb), entity="self-classifier", config=wandb_config)
             # update_args(args, dict(run.config))
     else:
         warnings.warn("No config file was provided. Using default parameters.")
