@@ -232,11 +232,11 @@ def train(loader, model, criterion, optimizer, lr_schedule, epoch, args):#add sc
                 loss = criterion(probs)
 
         # measure accuracy and record loss
-        # acc1 = utils.accuracy(output, target, topk=(1,))
+        acc1 = utils.accuracy(output, target, topk=(1,))
         losses.update(loss.item(), probs[0][0].size(0))
         batch_time.update(time.time() - end)
         end = time.time()
-        # top1.update(acc1[0], images.size(0))
+        top1.update(acc1[0], images.size(0))
 
         # compute gradient and do SGD step
         # scaler.scale(loss).backward()       
