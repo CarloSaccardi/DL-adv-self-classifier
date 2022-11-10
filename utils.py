@@ -122,6 +122,19 @@ def save_checkpoint(state, is_best, is_milestone, filename):
         shutil.copyfile(filename, os.path.join(os.path.split(filename)[0], 'model_{}.pth.tar'.format(state['epoch'])))
         print('Milestone {} model was saved.'.format(state['epoch']))
 
+def accuracy(output, target):
+    '''computing accuracy between a list of probabilites for each augmentation and batch with a list of target classes'''
+    output = output[0]
+    #output shape 8, 2, 5
+    #target shape 2, 1
+    acc = 0
+    for i in range(len(output)):
+        acc += (output[i].argmax(dim=1) == target).float().mean()
+
+    return acc / len(output)
+
+
+    
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""

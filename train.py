@@ -171,7 +171,8 @@ def main(args):
 
         # train for one epoch
         loss_i, acc1 = train(loader, model, criterion, optimizer, lr_schedule, epoch, args)#add scaler as input when using GPU
-        wandb.log({"train_loss": loss_i, "train_acc": acc1})
+        if args.wandb:
+            wandb.log({"Train Loss": loss_i, "Train Acc": acc1})
         print("##################################################")
         print("train_loss: ", loss_i)
         print("train_acc: ", acc1)
@@ -236,7 +237,10 @@ def train(loader, model, criterion, optimizer, lr_schedule, epoch, args):#add sc
         losses.update(loss.item(), probs[0][0].size(0))
         batch_time.update(time.time() - end)
         end = time.time()
-        #top1.update(acc1[0], images.size(0))
+        accuracy = utils.accuracy(probs, target)
+        # accuracy = utils.accuracy(probs, target, topk=(1,))[0]
+        top1.update(accuracy, target.size(0))
+        # top1.update(acc1[0], images.size(0))
 
         # compute gradient and do SGD step
         # scaler.scale(loss).backward()       
