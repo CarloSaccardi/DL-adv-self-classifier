@@ -46,7 +46,8 @@ class Model(nn.Module):
         # classification head
 
         #for cls_i in range(self.num_cls): --> this is the original code. Since we have only one task, we will not use a loop
-        
+        if len(self.cls_size)==1:
+            self.cls_size = self.cls_size[0]
         cls_layer_i = nn.utils.weight_norm(nn.Linear(dim, self.cls_size, bias=False))
         cls_layer_i.weight_g.data.fill_(1)
         setattr(self, "cls_0", cls_layer_i)
@@ -59,7 +60,6 @@ class Model(nn.Module):
     def forward(self, x, cls_num=None, return_embds=False):
         if isinstance(x, list):  # multiple views
             bs_size = x[0].shape[0]
-
             if return_embds:
                 # run backbone forward pass separately on each resolution input.
                 idx_crops = th.cumsum(th.unique_consecutive(th.Tensor([inp.shape[-1] for inp in x]), return_counts=True)[1], 0)
@@ -67,24 +67,24 @@ class Model(nn.Module):
                 for end_idx in idx_crops:
                     _out = self.backbone(th.cat(x[start_idx: end_idx]))
                     if start_idx == 0:
-                        output = _out
+                        output = _out #shape: (4, 512)
                     else:
-                        output = th.cat((output, _out))
+                        output = th.cat((output, _out))#shape: (batch_size*n_augm, 512)
                     start_idx = end_idx
 
                 # run classification head forward pass on concatenated features
-                embds = self.mlp_head(output)
+                embds = self.mlp_head(output)#shape: (batch_size*n_augm, 128)
                 # convert back to list of views
                 embds = [embds[x: x + bs_size] for x in range(0, len(embds), bs_size)]
                 return embds
             else:  # input is embds
                 # concatenate features
-                x = th.cat(x, 0)
+                x = th.cat(x, 0)#shape: (batch_size*n_augm, 128)
 
                 # apply classifiers
                 if cls_num is None:
                     # apply all classifiers
-                    out = [getattr(self, "cls_0")(x) for cls in range(self.num_cls)]
+                    out = [getattr(self, "cls_0")(x) for cls in range(self.num_cls)]#shape: [ (batch_size*n_augm, 5) ]
                 else:
                     # apply only cls_num
                     out = getattr(self, "cls_0")(x)
@@ -107,7 +107,7 @@ class Model(nn.Module):
                     # apply only cls_num
                     output = getattr(self, "cls_%d" % cls_num)(x)
 
-        return output
+        return output#[ [probs1, probs2, ..,probsBatchSize]*num_augms ]
     
     
 class MLPHead(nn.Module):
