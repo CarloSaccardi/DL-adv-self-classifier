@@ -31,7 +31,7 @@ from torch.cuda.amp import autocast, GradScaler
 from model import Model
 import matplotlib.pyplot as plt
 sys.path.append(os.path.join(os.path.dirname(__file__), "self-classifier")) 
-import vit as vits
+#import vit as vits
 # from src.utils import *
 
 def parser_func():
@@ -134,10 +134,10 @@ def main(args):
     print(args)
     
     
-    if args.arch in vits.__dict__.keys():
-        base_model = vits.__dict__[args.arch](patch_size=args.patch_size)
-        backbone_dim = base_model.embed_dim
-    elif args.arch in torchvision_models.__dict__.keys():
+    # if args.arch in vits.__dict__.keys():
+    #     base_model = vits.__dict__[args.arch](patch_size=args.patch_size)
+    #     backbone_dim = base_model.embed_dim
+    if args.arch in torchvision_models.__dict__.keys():
         base_model = torchvision_models.__dict__[args.arch]()
         backbone_dim = base_model.fc.weight.shape[1]
     else:
@@ -172,13 +172,10 @@ def main(args):
 
 
     traindir = os.path.join(args.data, 'train')
-    valdir = os.path.join(args.data, 'val')
     transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number)
     dataset = utils.ImageFolderWithIndices(traindir, transform=transform)
-    dataset_val = utils.ImageFolderWithIndices(valdir, transform=transform)
     loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
-    loader_val = torch.utils.data.DataLoader(dataset_val, batch_size=args.batch_size, shuffle=False, drop_last=False)
-    criterion = Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps)
+    criterion = Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps).cuda() if torch.cuda.is_available() else Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps)
     
     # schedulers
     lr_schedule = utils.cosine_scheduler_with_warmup(base_value=args.lr,
