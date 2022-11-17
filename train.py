@@ -126,6 +126,8 @@ def parser_func():
                     values leads to better performance but requires more memory. 
                     Applies only for ViTs (vit_tiny, vit_small and vit_base). If <16, we recommend disabling 
                     mixed precision training to avoid unstabilities.""")
+    parser.add_argument('--subset', default=0, type=int,
+                    help="""Sample a subset of images for faster training""")
 
     args = parser.parse_args()
     
@@ -179,6 +181,13 @@ def main(args):
     transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number)
     dataset = utils.ImageFolderWithIndices(traindir, transform=transform)
     loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+    
+    if args.subset > 0:       
+        #sample a subset of the dataset for faster training
+        indices = np.random.choice(len(dataset), size=args.subset, replace=False)
+        data_subset = torch.utils.data.Subset(dataset, indices)
+        loader = torch.utils.data.DataLoader(data_subset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+
     criterion = Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps)
     
     # schedulers

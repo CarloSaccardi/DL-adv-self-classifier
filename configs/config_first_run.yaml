@@ -7,3 +7,4 @@ sgd: True
 lars: False
 no_leaky: True
 batch_size: 64
+subset: 100
