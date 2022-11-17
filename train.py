@@ -122,12 +122,14 @@ def parser_func():
     parser.add_argument("--local_config", default=None, help="config path")
     parser.add_argument("--wandb", default=None, help="Specify project name to log using WandB")
     parser.add_argument('--patch-size', default=16, type=int,
-                    help="""Size in pixels of input square patches - default 16 (for 16x16 patches). Using smaller 
-                    values leads to better performance but requires more memory. 
-                    Applies only for ViTs (vit_tiny, vit_small and vit_base). If <16, we recommend disabling 
-                    mixed precision training to avoid unstabilities.""")
+                        help="""Size in pixels of input square patches - default 16 (for 16x16 patches). Using smaller 
+                        values leads to better performance but requires more memory. 
+                        Applies only for ViTs (vit_tiny, vit_small and vit_base). If <16, we recommend disabling 
+                        mixed precision training to avoid unstabilities.""")
     parser.add_argument('--subset', default=0, type=int,
-                    help="""Sample a subset of images for faster training""")
+                        help="""Sample a subset of images for faster training""")
+    parser.add_argument('--queue-len', default=262144, type=int,
+                    help='length of nearest neighbor queue')
 
     args = parser.parse_args()
     
@@ -157,6 +159,11 @@ def main(args):
                       fixed_cls=args.fixed_cls,
                       no_leaky=args.no_leaky)
     print(model)
+
+
+    nn_queue = utils.NNQueue(args.queue_len, args.dim, args.gpu)
+
+
     if args.gpu is not None:
         print('##### USING THE GPU #####')
         #torch.autograd.set_detect_anomaly(True)
@@ -203,7 +210,7 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
 
         # train for one epoch
-        loss_i, acc1 = train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)#add scaler as input when using GPU
+        loss_i, acc1 = train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, epoch, args)
         if args.wandb:
             wandb.log({"Train Loss": loss_i, "Train Acc": acc1})
         print("##################################################")
@@ -220,6 +227,7 @@ def main(args):
             'arch': args.arch,
             'state_dict': model.state_dict(),
             'best_loss': best_loss,
+            'nn_queue': nn_queue,
             'optimizer': optimizer.state_dict(),
         }, is_best=is_best, is_milestone=(epoch + 1) % 25 == 0,
             filename=os.path.join(args.save_path, 'model_last.pth.tar'))
@@ -228,7 +236,7 @@ def main(args):
 
 
 
-def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args):#add scaler as input when using GPU
+def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, epoch, args):#add scaler as input when using GPU
     
     batch_time = utils.AverageMeter('Time', ':6.3f')
     data_time = utils.AverageMeter('Data', ':6.3f')
@@ -251,8 +259,7 @@ def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)
             utils.adjust_lr(optimizer, lr_schedule, iteration=epoch * len(loader) + i)
         else:
             warnings.warn("Learning rate is not being adjusted. Set cos=True")    
-        
-        
+
         optimizer.zero_grad()
         
         if args.gpu is not None:
@@ -265,12 +272,23 @@ def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)
         # compute output
         with autocast(enabled=args.use_amp):
             embds = model(images, return_embds=True)
+        
+            embds1 = embds[0].clone().detach()
+
+            if nn_queue.full():
+                _, nn_targets = nn_queue.get_nn(embds1, indices)
+
+                acc1 = (target.view(-1, ) == nn_targets.view(-1, )).float().mean().view(1, ) * 100.0
+                top1.update(acc1, target.size(0))
+
+
+            nn_queue.push(embds1, target, indices)
             probs = model(embds, return_embds=False)
 
             with autocast(enabled=False):
                 # compute loss
-                probs_ = [[tensor.double() for tensor in lists] for lists in probs]
-                loss = criterion(probs_F)
+                probs_ = [[tensor.to(dtype = torch.float32) for tensor in lists] for lists in probs]
+                loss = criterion(probs_)
         
         assert not torch.isnan(loss), 'loss is nan!'
 
@@ -285,11 +303,11 @@ def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)
         
         #_ = utils.clip_gradients(model, 0.3)
 
-        losses.update(loss.item(), probs[0][0].size(0))
+        losses.update(loss.item(), probs_[0][0].size(0))
         batch_time.update(time.time() - end)
         end = time.time()
-        accuracy = utils.accuracy(probs, target)
-        top1.update(accuracy, target.size(0))
+        # accuracy = utils.accuracy(probs_, target)
+        # top1.update(accuracy, target.size(0))
         
         # measure elapsed time
         batch_time.update(time.time() - end)
