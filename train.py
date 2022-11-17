@@ -50,7 +50,7 @@ def parser_func():
     parser.add_argument('-b', '--batch-size', default=2, type=int,
                         metavar='N')
     parser.add_argument('--gpu', default=None, type=int) 
-    parser.add_argument('--lr', '--learning-rate', default=0.8, type=float,
+    parser.add_argument('--lr', '--learning-rate', default=4.8, type=float,
                         metavar='LR', help='initial learning rate', dest='lr')
     parser.add_argument('--cos', action='store_true',
                         help='use cosine lr schedule')
@@ -243,20 +243,17 @@ def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)
     end = time.time()
     
     for i, (images, target, indices) in enumerate(loader):
-       # print('####################################################')
-       # print('PRINT IMAGES, first loop')
-       # print(images)
-       # print('####################################################')
-       # # measure data loading time
+
         data_time.update(time.time() - end)
-        """        
-        for i in range(len(images)):
-            img1 = images[i][1].permute(1, 2, 0).detach().cpu().numpy()
-            plt.imshow(img1)
-            plt.savefig(str(i)+"test.png")
-        """
+
         # adjust learning rate
-        utils.adjust_lr(optimizer, lr_schedule, iteration=epoch * len(loader) + i)
+        if args.cos:
+            utils.adjust_lr(optimizer, lr_schedule, iteration=epoch * len(loader) + i)
+        else:
+            warnings.warn("Learning rate is not being adjusted. Set cos=True")    
+        
+        
+        optimizer.zero_grad()
         
         if args.gpu is not None:
             #print('##### LOADING ALL IMAGES ONTO THE GPU #####')
@@ -269,9 +266,11 @@ def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)
         with autocast(enabled=args.use_amp):
             embds = model(images, return_embds=True)
             probs = model(embds, return_embds=False)
+
             with autocast(enabled=False):
                 # compute loss
-                loss = criterion(probs)
+                probs_ = [[tensor.double() for tensor in lists] for lists in probs]
+                loss = criterion(probs_F)
         
         assert not torch.isnan(loss), 'loss is nan!'
 

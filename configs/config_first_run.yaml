@@ -1,10 +1,12 @@
 wandb: first_runs
 use_bn: True
 data: ../imagenette2
-epochs: 400
+epochs: 100
 gpu: 0
 sgd: True
-lars: False
-no_leaky: True
-batch_size: 64
+no_leaky: False  #False means leaky relu. True mean relu
+batch_size: 16
 subset: 100
+cos: True
+final_lr:
+final_lr: 0.0048
