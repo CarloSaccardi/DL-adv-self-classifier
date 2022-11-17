@@ -1,1 +1,9 @@
-wandb: debug_code
+wandb: first_runs
+use_bn: True
+data: ../imagenette2
+epochs: 400
+gpu: 0
+sgd: True
+lars: False
+no_leaky: True
+batch_size: 64

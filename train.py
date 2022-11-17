@@ -49,7 +49,8 @@ def parser_func():
                         help='number of total epochs to run')
     parser.add_argument('-b', '--batch-size', default=2, type=int,
                         metavar='N')
-    parser.add_argument('--lr', '--learning-rate', default=4.8, type=float,
+    parser.add_argument('--gpu', default=None, type=int) 
+    parser.add_argument('--lr', '--learning-rate', default=0.8, type=float,
                         metavar='LR', help='initial learning rate', dest='lr')
     parser.add_argument('--cos', action='store_true',
                         help='use cosine lr schedule')
@@ -94,7 +95,7 @@ def parser_func():
                     help='row softmax temperature (default: 0.1)')
     parser.add_argument('--col-tau', default=0.05, type=float,
                     help='column softmax temperature (default: 0.05)')
-    parser.add_argument('--eps', type=float, default=1e-12,
+    parser.add_argument('--eps', type=float, default=1e-8,
                     help='small value to avoid division by zero and log(0)')
     parser.add_argument('--final-lr', default=None, type=float,
                     help='final learning rate (None for constant learning rate)')
@@ -153,14 +154,17 @@ def main(args):
                       backbone_dim=backbone_dim,
                       fixed_cls=args.fixed_cls,
                       no_leaky=args.no_leaky)
-
-    if torch.cuda.is_available():
+    print(model)
+    if args.gpu is not None:
+        print('##### USING THE GPU #####')
+        #torch.autograd.set_detect_anomaly(True)
+        torch.cuda.set_device('cuda:0')
         # DataParallel will divide and allocate batch_size to all available GPUs
         if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
             model.features = torch.nn.DataParallel(model.features)
             model.cuda()
         else:
-            model = torch.nn.DataParallel(model).cuda()
+            model = model.cuda()   
 
     if args.sgd:
         optimizer = torch.optim.SGD(model.parameters(), args.lr,
@@ -175,7 +179,7 @@ def main(args):
     transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number)
     dataset = utils.ImageFolderWithIndices(traindir, transform=transform)
     loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
-    criterion = Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps).cuda() if torch.cuda.is_available() else Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps)
+    criterion = Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps)
     
     # schedulers
     lr_schedule = utils.cosine_scheduler_with_warmup(base_value=args.lr,
@@ -230,7 +234,11 @@ def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)
     end = time.time()
     
     for i, (images, target, indices) in enumerate(loader):
-        # measure data loading time
+       # print('####################################################')
+       # print('PRINT IMAGES, first loop')
+       # print(images)
+       # print('####################################################')
+       # # measure data loading time
         data_time.update(time.time() - end)
         """        
         for i in range(len(images)):
@@ -240,42 +248,41 @@ def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)
         """
         # adjust learning rate
         utils.adjust_lr(optimizer, lr_schedule, iteration=epoch * len(loader) + i)
-
-        optimizer.zero_grad()
-
-        if torch.cuda.is_available():
+        
+        if args.gpu is not None:
+            #print('##### LOADING ALL IMAGES ONTO THE GPU #####')
             images = [x.cuda(args.gpu, non_blocking=True) for x in images]
-            targets = targets.cuda(args.gpu, non_blocking=True)  # only used for monitoring progress, NOT for training
+            target = target.cuda(args.gpu, non_blocking=True)  # only used for monitoring progress, NOT for training
             indices = indices.cuda(args.gpu, non_blocking=True)
+            
        
         # compute output
         with autocast(enabled=args.use_amp):
-
             embds = model(images, return_embds=True)
-
             probs = model(embds, return_embds=False)
             with autocast(enabled=False):
                 # compute loss
                 loss = criterion(probs)
+        
+        assert not torch.isnan(loss), 'loss is nan!'
 
         # measure accuracy and record loss
-        assert not torch.isnan(loss), 'loss is nan!'
+        
+        # compute gradient and do SGD step
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+
+        loss.detach()
+        
+        #_ = utils.clip_gradients(model, 0.3)
+
         losses.update(loss.item(), probs[0][0].size(0))
         batch_time.update(time.time() - end)
         end = time.time()
         accuracy = utils.accuracy(probs, target)
         top1.update(accuracy, target.size(0))
-
-        # compute gradient and do SGD step
-        if torch.cuda.is_available():
-            scaler.scale(loss).backward()       
-            scaler.step(optimizer)
-            scaler.update() 
-            
-        else:
-            loss.backward()
-            optimizer.step()
-
+        
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
