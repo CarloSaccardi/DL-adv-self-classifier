@@ -2,7 +2,7 @@ import os
 import shutil
 import warnings
 import numpy as np
-import torch
+import torch as th
 import random
 import math
 import urllib.request
@@ -114,7 +114,7 @@ class DataAugmentation(object):
         return crops
 
 def save_checkpoint(state, is_best, is_milestone, filename):
-    torch.save(state, filename)
+    th.save(state, filename)
     if is_best:
         shutil.copyfile(filename, os.path.join(os.path.split(filename)[0], 'model_best.pth.tar'))
         print('Best model was saved.')
@@ -132,6 +132,61 @@ def accuracy(output, target):
         acc += (output[i].argmax(dim=1) == target).float().mean()
 
     return acc / len(output)
+
+
+class NNQueue:
+    def __init__(self, queue_len=131072, dim=128, gpu=None):
+        super().__init__()
+        self.queue_len = queue_len
+        self.dim = dim
+
+        self.queue = th.zeros(self.queue_len, self.dim)
+        self.queue_targets = th.zeros(self.queue_len)  # only used for monitoring progress
+        self.queue_indices = th.zeros(self.queue_len, dtype=th.long)  # used to avoid choosing the same sample as NN
+
+        if th.cuda.is_available():
+            self.queue = self.queue.cuda(gpu, non_blocking=True)
+            self.queue_targets = self.queue_targets.cuda(gpu, non_blocking=True)
+            self.queue_indices = self.queue_indices.cuda(gpu, non_blocking=True)
+
+        self.ptr = 0
+        self.full = False
+
+    def get_nn(self, x, x_indices):
+        # extract top2 in case first sample is the query sample itself which can happen
+        # in the first few iterations of a new epoch
+        _, q_indices = (x @ self.queue.T).topk(2)  # extract indices of queue for top2
+        sample_indices = self.queue_indices[q_indices]  # extract 'global' indices of extracted samples
+        indices = th.where(x_indices == sample_indices[:, 0], q_indices[:, 1], q_indices[:, 0])
+
+        # extract values
+        out = self.queue[indices]
+        targets = self.queue_targets[indices]  # only used for monitoring progress, not for training
+        return out, targets
+
+    def push(self, x, x_targets, x_indices):
+        x_size = x.shape[0]
+        old_ptr = self.ptr
+        if self.ptr + x_size <= self.queue_len:
+            self.queue[self.ptr: self.ptr + x_size] = x
+            self.queue_targets[self.ptr: self.ptr + x_size] = x_targets
+            self.queue_indices[self.ptr: self.ptr + x_size] = x_indices
+            self.ptr = (self.ptr + x_size) % self.queue_len
+
+        else:
+            self.queue[self.ptr:] = x[:self.queue_len - old_ptr]
+            self.queue_targets[self.ptr:] = x_targets[:self.queue_len - old_ptr]
+            self.queue_indices[self.ptr:] = x_indices[:self.queue_len - old_ptr]
+
+            self.ptr = (self.ptr + x_size) % self.queue_len
+
+            self.queue[:self.ptr] = x[self.queue_len - old_ptr:]
+            self.queue_targets[:self.ptr] = x_targets[self.queue_len - old_ptr:]
+            self.queue_indices[:self.ptr] = x_indices[self.queue_len - old_ptr:]
+
+        if not self.full and old_ptr + x_size >= self.queue_len:
+            self.full = True
+
 
 
     

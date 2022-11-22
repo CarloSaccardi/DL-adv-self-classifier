@@ -31,6 +31,8 @@ class Model(nn.Module):
         self.use_bn = use_bn
         self.fixed_cls = fixed_cls
         self.no_leaky = no_leaky
+        
+        th.set_default_dtype(th.float32)
 
         # backbone
         self.backbone = base_model
@@ -73,6 +75,7 @@ class Model(nn.Module):
                     start_idx = end_idx
 
                 # run classification head forward pass on concatenated features
+                
                 embds = self.mlp_head(output)#shape: (batch_size*n_augm, 128)
                 # convert back to list of views
                 embds = [embds[x: x + bs_size] for x in range(0, len(embds), bs_size)]
@@ -80,7 +83,6 @@ class Model(nn.Module):
             else:  # input is embds
                 # concatenate features
                 x = th.cat(x, 0)#shape: (batch_size*n_augm, 128)
-
                 # apply classifiers
                 if cls_num is None:
                     # apply all classifiers

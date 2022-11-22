@@ -21,6 +21,7 @@ import wandb
 from loss import Loss
 import torch
 import torch.optim
+import torch.backends.cudnn as cudnn
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.models as torchvision_models
@@ -49,6 +50,7 @@ def parser_func():
                         help='number of total epochs to run')
     parser.add_argument('-b', '--batch-size', default=2, type=int,
                         metavar='N')
+    parser.add_argument('--gpu', default=None, type=int) 
     parser.add_argument('--lr', '--learning-rate', default=4.8, type=float,
                         metavar='LR', help='initial learning rate', dest='lr')
     parser.add_argument('--cos', action='store_true',
@@ -94,7 +96,7 @@ def parser_func():
                     help='row softmax temperature (default: 0.1)')
     parser.add_argument('--col-tau', default=0.05, type=float,
                     help='column softmax temperature (default: 0.05)')
-    parser.add_argument('--eps', type=float, default=1e-12,
+    parser.add_argument('--eps', type=float, default=1e-8,
                     help='small value to avoid division by zero and log(0)')
     parser.add_argument('--final-lr', default=None, type=float,
                     help='final learning rate (None for constant learning rate)')
@@ -121,10 +123,14 @@ def parser_func():
     parser.add_argument("--local_config", default=None, help="config path")
     parser.add_argument("--wandb", default=None, help="Specify project name to log using WandB")
     parser.add_argument('--patch-size', default=16, type=int,
-                    help="""Size in pixels of input square patches - default 16 (for 16x16 patches). Using smaller 
-                    values leads to better performance but requires more memory. 
-                    Applies only for ViTs (vit_tiny, vit_small and vit_base). If <16, we recommend disabling 
-                    mixed precision training to avoid unstabilities.""")
+                        help="""Size in pixels of input square patches - default 16 (for 16x16 patches). Using smaller 
+                        values leads to better performance but requires more memory. 
+                        Applies only for ViTs (vit_tiny, vit_small and vit_base). If <16, we recommend disabling 
+                        mixed precision training to avoid unstabilities.""")
+    parser.add_argument('--subset', default=0, type=int,
+                        help="""Sample a subset of images for faster training""")
+    parser.add_argument('--queue-len', default=262144, type=int,
+                    help='length of nearest neighbor queue')
 
     args = parser.parse_args()
     
@@ -153,14 +159,22 @@ def main(args):
                       backbone_dim=backbone_dim,
                       fixed_cls=args.fixed_cls,
                       no_leaky=args.no_leaky)
+    print(model)
 
-    if torch.cuda.is_available():
+
+    nn_queue = utils.NNQueue(args.queue_len, args.dim, args.gpu)
+
+
+    if args.gpu is not None:
+        print('##### USING THE GPU #####')
+        #torch.autograd.set_detect_anomaly(True)
+        torch.cuda.set_device('cuda:0')
         # DataParallel will divide and allocate batch_size to all available GPUs
         if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
             model.features = torch.nn.DataParallel(model.features)
             model.cuda()
         else:
-            model = torch.nn.DataParallel(model).cuda()
+            model = model.cuda()   
 
     if args.sgd:
         optimizer = torch.optim.SGD(model.parameters(), args.lr,
@@ -171,11 +185,41 @@ def main(args):
                                       weight_decay=args.weight_decay)
 
 
+
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '{}'".format(args.resume))
+            if args.gpu is None:
+                checkpoint = torch.load(args.resume)
+            else:
+                # Map model to be loaded to specified single gpu.
+                loc = 'cuda:{}'.format(args.gpu)
+                checkpoint = torch.load(args.resume, map_location=loc)
+            args.start_epoch = checkpoint['epoch']
+            best_loss = checkpoint['best_loss']
+            nn_queue = checkpoint['nn_queue']
+            model.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            print("=> loaded checkpoint '{}' (epoch {})"
+                  .format(args.resume, checkpoint['epoch']))
+            del checkpoint
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
+
+    cudnn.benchmark = True
+
     traindir = os.path.join(args.data, 'train')
     transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number)
     dataset = utils.ImageFolderWithIndices(traindir, transform=transform)
     loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
-    criterion = Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps).cuda() if torch.cuda.is_available() else Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps)
+    
+    if args.subset > 0:       
+        #sample a subset of the dataset for faster training
+        indices = np.random.choice(len(dataset), size=args.subset, replace=False)
+        data_subset = torch.utils.data.Subset(dataset, indices)
+        loader = torch.utils.data.DataLoader(data_subset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+
+    criterion = Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps)
     
     # schedulers
     lr_schedule = utils.cosine_scheduler_with_warmup(base_value=args.lr,
@@ -190,7 +234,7 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
 
         # train for one epoch
-        loss_i, acc1 = train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)#add scaler as input when using GPU
+        loss_i, acc1 = train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, epoch, args)
         if args.wandb:
             wandb.log({"Train Loss": loss_i, "Train Acc": acc1})
         print("##################################################")
@@ -207,6 +251,7 @@ def main(args):
             'arch': args.arch,
             'state_dict': model.state_dict(),
             'best_loss': best_loss,
+            'nn_queue': nn_queue,
             'optimizer': optimizer.state_dict(),
         }, is_best=is_best, is_milestone=(epoch + 1) % 25 == 0,
             filename=os.path.join(args.save_path, 'model_last.pth.tar'))
@@ -215,7 +260,7 @@ def main(args):
 
 
 
-def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args):#add scaler as input when using GPU
+def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, epoch, args):#add scaler as input when using GPU
     
     batch_time = utils.AverageMeter('Time', ':6.3f')
     data_time = utils.AverageMeter('Data', ':6.3f')
@@ -230,52 +275,62 @@ def train(loader, model, scaler, criterion, optimizer, lr_schedule, epoch, args)
     end = time.time()
     
     for i, (images, target, indices) in enumerate(loader):
-        # measure data loading time
+
         data_time.update(time.time() - end)
-        """        
-        for i in range(len(images)):
-            img1 = images[i][1].permute(1, 2, 0).detach().cpu().numpy()
-            plt.imshow(img1)
-            plt.savefig(str(i)+"test.png")
-        """
+
         # adjust learning rate
-        utils.adjust_lr(optimizer, lr_schedule, iteration=epoch * len(loader) + i)
+        if args.cos:
+            utils.adjust_lr(optimizer, lr_schedule, iteration=epoch * len(loader) + i)
+        else:
+            warnings.warn("Learning rate is not being adjusted. Set cos=True")    
 
         optimizer.zero_grad()
-
-        if torch.cuda.is_available():
+        
+        if args.gpu is not None:
+            #print('##### LOADING ALL IMAGES ONTO THE GPU #####')
             images = [x.cuda(args.gpu, non_blocking=True) for x in images]
-            targets = targets.cuda(args.gpu, non_blocking=True)  # only used for monitoring progress, NOT for training
+            target = target.cuda(args.gpu, non_blocking=True)  # only used for monitoring progress, NOT for training
             indices = indices.cuda(args.gpu, non_blocking=True)
+            
        
         # compute output
         with autocast(enabled=args.use_amp):
-
             embds = model(images, return_embds=True)
+        
+            embds1 = embds[0].clone().detach()
 
+            if nn_queue.full:
+                _, nn_targets = nn_queue.get_nn(embds1, indices)
+
+                acc1 = (target.view(-1, ) == nn_targets.view(-1, )).float().mean().view(1, ) * 100.0
+                top1.update(acc1, target.size(0))
+
+
+            nn_queue.push(embds1, target, indices)
             probs = model(embds, return_embds=False)
+
             with autocast(enabled=False):
                 # compute loss
-                loss = criterion(probs)
+                probs_ = [[tensor.to(dtype = torch.float32) for tensor in lists] for lists in probs]
+                loss = criterion(probs_)
+        
+        assert not torch.isnan(loss), 'loss is nan!'
 
         # measure accuracy and record loss
-        assert not torch.isnan(loss), 'loss is nan!'
-        losses.update(loss.item(), probs[0][0].size(0))
+        
+        # compute gradient and do SGD step
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+
+        loss.detach()
+        
+        #_ = utils.clip_gradients(model, 0.3)
+
+        losses.update(loss.item(), probs_[0][0].size(0))
         batch_time.update(time.time() - end)
         end = time.time()
-        accuracy = utils.accuracy(probs, target)
-        top1.update(accuracy, target.size(0))
-
-        # compute gradient and do SGD step
-        if torch.cuda.is_available():
-            scaler.scale(loss).backward()       
-            scaler.step(optimizer)
-            scaler.update() 
-            
-        else:
-            loss.backward()
-            optimizer.step()
-
+        
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()

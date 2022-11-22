@@ -1,1 +1,13 @@
-wandb: debug_code
+wandb: first_runs
+use_bn: True
+data: ../imagenette2
+epochs: 100
+gpu: 0
+sgd: True
+no_leaky: False  #False means leaky relu. True mean relu
+batch_size: 16
+subset: 0
+cos: True
+final_lr: 0.0048
+num-hidden: 2
+resume: ./saved/model_last.pth.tar

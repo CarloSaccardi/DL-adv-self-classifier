@@ -1,2 +1,5 @@
 *.pyc
 wandb
+saved/
+self-classifier/
+
