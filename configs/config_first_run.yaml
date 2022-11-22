@@ -10,3 +10,4 @@ subset: 0
 cos: True
 final_lr: 0.0048
 num-hidden: 2
+resume: ./saved/model_last.pth.tar

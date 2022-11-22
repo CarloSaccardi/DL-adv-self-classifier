@@ -21,6 +21,7 @@ import wandb
 from loss import Loss
 import torch
 import torch.optim
+import torch.backends.cudnn as cudnn
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.models as torchvision_models
@@ -130,6 +131,8 @@ def parser_func():
                         help="""Sample a subset of images for faster training""")
     parser.add_argument('--queue-len', default=262144, type=int,
                     help='length of nearest neighbor queue')
+    parser.add_argument('--resume', default='', type=str, metavar='PATH',
+                    help='path to latest checkpoint (default: none)')
 
     args = parser.parse_args()
     
@@ -183,6 +186,29 @@ def main(args):
         optimizer = torch.optim.AdamW(model.parameters(), args.lr,
                                       weight_decay=args.weight_decay)
 
+
+
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '{}'".format(args.resume))
+            if args.gpu is None:
+                checkpoint = torch.load(args.resume)
+            else:
+                # Map model to be loaded to specified single gpu.
+                loc = 'cuda:{}'.format(args.gpu)
+                checkpoint = torch.load(args.resume, map_location=loc)
+            args.start_epoch = checkpoint['epoch']
+            best_loss = checkpoint['best_loss']
+            nn_queue = checkpoint['nn_queue']
+            model.load_state_dict(checkpoint['state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer'])
+            print("=> loaded checkpoint '{}' (epoch {})"
+                  .format(args.resume, checkpoint['epoch']))
+            del checkpoint
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
+
+    cudnn.benchmark = True
 
     traindir = os.path.join(args.data, 'train')
     transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number)
@@ -306,8 +332,6 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
         losses.update(loss.item(), probs_[0][0].size(0))
         batch_time.update(time.time() - end)
         end = time.time()
-        # accuracy = utils.accuracy(probs_, target)
-        # top1.update(accuracy, target.size(0))
         
         # measure elapsed time
         batch_time.update(time.time() - end)
