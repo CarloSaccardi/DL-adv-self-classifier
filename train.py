@@ -131,8 +131,6 @@ def parser_func():
                         help="""Sample a subset of images for faster training""")
     parser.add_argument('--queue-len', default=262144, type=int,
                     help='length of nearest neighbor queue')
-    parser.add_argument('--resume', default='', type=str, metavar='PATH',
-                    help='path to latest checkpoint (default: none)')
 
     args = parser.parse_args()
     
@@ -301,7 +299,7 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
         
             embds1 = embds[0].clone().detach()
 
-            if nn_queue.full():
+            if nn_queue.full:
                 _, nn_targets = nn_queue.get_nn(embds1, indices)
 
                 acc1 = (target.view(-1, ) == nn_targets.view(-1, )).float().mean().view(1, ) * 100.0
