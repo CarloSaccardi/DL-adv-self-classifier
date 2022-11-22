@@ -131,8 +131,6 @@ def parser_func():
                         help="""Sample a subset of images for faster training""")
     parser.add_argument('--queue-len', default=262144, type=int,
                     help='length of nearest neighbor queue')
-    parser.add_argument('--resume', default='', type=str, metavar='PATH',
-                    help='path to latest checkpoint (default: none)')
 
     args = parser.parse_args()
     
@@ -267,7 +265,7 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
     batch_time = utils.AverageMeter('Time', ':6.3f')
     data_time = utils.AverageMeter('Data', ':6.3f')
     losses = utils.AverageMeter('Loss', ':.4e')
-    top1 = utils.AverageMeter('Acc@1', ':6.2f')
+    top1 = utils.AverageMeter('Acc@1', ':6.6f')
     progress = utils.ProgressMeter(len(loader), [batch_time, data_time, losses, top1],
                                    prefix="Epoch: [{}]".format(epoch))
 
@@ -301,12 +299,13 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
         
             embds1 = embds[0].clone().detach()
 
-            if nn_queue.full():
+            if nn_queue.full:
                 _, nn_targets = nn_queue.get_nn(embds1, indices)
 
                 acc1 = (target.view(-1, ) == nn_targets.view(-1, )).float().mean().view(1, ) * 100.0
-                top1.update(acc1, target.size(0))
-
+                # print(acc1, acc1[0])
+                top1.update(acc1[0], target.size(0))
+    
 
             nn_queue.push(embds1, target, indices)
             probs = model(embds, return_embds=False)
@@ -334,8 +333,7 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
         end = time.time()
         
         # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
+    
 
         if i % args.print_freq == 0:
             progress.display(i)

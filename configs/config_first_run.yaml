@@ -1,4 +1,4 @@
-wandb: first_runs
+# wandb: big_run
 use_bn: True
 data: ../imagenette2
 epochs: 100
@@ -9,5 +9,5 @@ batch_size: 16
 subset: 0
 cos: True
 final_lr: 0.0048
-num-hidden: 2
-resume: ./saved/model_last.pth.tar
+num_hidden: 2
+queue_len: 100
