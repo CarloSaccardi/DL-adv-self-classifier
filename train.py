@@ -31,8 +31,7 @@ import utils
 from torch.cuda.amp import autocast, GradScaler
 from model import Model
 import matplotlib.pyplot as plt
-sys.path.append(os.path.join(os.path.dirname(__file__), "self-classifier")) 
-#import vit as vits
+import vit as vits
 # from src.utils import *
 
 def parser_func():
@@ -140,10 +139,10 @@ def main(args):
     print(args)
     
     
-    # if args.arch in vits.__dict__.keys():
-    #     base_model = vits.__dict__[args.arch](patch_size=args.patch_size)
-    #     backbone_dim = base_model.embed_dim
-    if args.arch in torchvision_models.__dict__.keys():
+    if args.arch in vits.__dict__.keys():
+        base_model = vits.__dict__[args.arch](patch_size=args.patch_size)
+        backbone_dim = base_model.embed_dim
+    elif args.arch in torchvision_models.__dict__.keys():
         base_model = torchvision_models.__dict__[args.arch]()
         backbone_dim = base_model.fc.weight.shape[1]
     else:

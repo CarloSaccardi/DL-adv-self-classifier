@@ -1,8 +1,7 @@
 # wandb: big_run
 use_bn: True
-data: ../imagenette2
+data: ./tiny_dataset
 epochs: 100
-gpu: 0
 sgd: True
 no_leaky: False  #False means leaky relu. True mean relu
 batch_size: 16
@@ -11,3 +10,5 @@ cos: True
 final_lr: 0.0048
 num_hidden: 2
 queue_len: 100
+arch: vit_tiny
+
