@@ -32,6 +32,8 @@ from torch.cuda.amp import autocast, GradScaler
 from model import Model
 import matplotlib.pyplot as plt
 import vit as vits
+import vit_moco as vit_moco 
+from functools import partial
 # from src.utils import *
 
 def parser_func():
@@ -130,6 +132,11 @@ def parser_func():
                         help="""Sample a subset of images for faster training""")
     parser.add_argument('--queue-len', default=262144, type=int,
                     help='length of nearest neighbor queue')
+    parser.add_argument('--moco', default = False, action='store_true',
+                        help='use automatic mixed precision')
+    parser.add_argument('--stop-grad-conv1', action='store_true',
+                    help='stop-grad after first conv, or patch embedding')
+    
 
     args = parser.parse_args()
     
@@ -140,8 +147,12 @@ def main(args):
     
     
     if args.arch in vits.__dict__.keys():
-        base_model = vits.__dict__[args.arch](patch_size=args.patch_size)
-        backbone_dim = base_model.embed_dim
+        if args.moco: 
+            base_model = partial(vits.__dict__[args.arch], stop_grad_conv1=args.stop_grad_conv1)
+            backbone_dim = 192
+        else:
+            base_model = vits.__dict__[args.arch](patch_size=args.patch_size)
+            backbone_dim = base_model.embed_dim
     elif args.arch in torchvision_models.__dict__.keys():
         base_model = torchvision_models.__dict__[args.arch]()
         backbone_dim = base_model.fc.weight.shape[1]
