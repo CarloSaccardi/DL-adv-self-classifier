@@ -67,6 +67,7 @@ class VisionTransformerMoCo(VisionTransformer):
         pe_token = torch.zeros([1, 1, self.embed_dim], dtype=torch.float32)
         self.pos_embed = nn.Parameter(torch.cat([pe_token, pos_emb], dim=1))
         self.pos_embed.requires_grad = False
+        
 
 
 class ConvStem(nn.Module):

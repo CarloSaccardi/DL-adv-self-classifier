@@ -33,7 +33,9 @@ from model import Model
 import matplotlib.pyplot as plt
 import vit as vits
 import vit_moco as vit_moco 
+from moco_builder import MoCo_ViT
 from functools import partial
+
 # from src.utils import *
 
 def parser_func():
@@ -136,7 +138,18 @@ def parser_func():
                         help='use automatic mixed precision')
     parser.add_argument('--stop-grad-conv1', action='store_true',
                     help='stop-grad after first conv, or patch embedding')
-    
+    parser.add_argument('--moco-dim', default=192, type=int,
+                        help='feature dimension (default: 256)')
+    parser.add_argument('--moco-mlp-dim', default=4096, type=int,
+                        help='hidden dimension in MLPs (default: 4096)')
+    parser.add_argument('--moco-m', default=0.99, type=float,
+                        help='moco momentum of updating momentum encoder (default: 0.99)')
+    parser.add_argument('--moco-m-cos', action='store_true',
+                        help='gradually increase moco momentum to 1 with a '
+                            'half-cycle cosine schedule')
+    parser.add_argument('--moco-t', default=1.0, type=float,
+                        help='softmax temperature (default: 1.0)')
+        
 
     args = parser.parse_args()
     
@@ -145,11 +158,11 @@ def parser_func():
 def main(args):
     print(args)
     
-    
     if args.arch in vits.__dict__.keys():
         if args.moco: 
-            base_model = partial(vits.__dict__[args.arch], stop_grad_conv1=args.stop_grad_conv1)
-            backbone_dim = 192
+            base_model = MoCo_ViT(partial(vits.__dict__[args.arch], stop_grad_conv1=args.stop_grad_conv1),
+                                    args.moco_dim, args.moco_mlp_dim, args.moco_t)
+            backbone_dim = args.moco_dim
         else:
             base_model = vits.__dict__[args.arch](patch_size=args.patch_size)
             backbone_dim = base_model.embed_dim
@@ -305,7 +318,7 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
        
         # compute output
         with autocast(enabled=args.use_amp):
-            embds = model(images, return_embds=True)
+            embds = model(images, return_embds=True, moco=args.moco)
         
             embds1 = embds[0].clone().detach()
 
