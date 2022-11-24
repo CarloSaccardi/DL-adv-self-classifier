@@ -1,7 +1,7 @@
-# wandb: big_run
+wandb: big_run
 use_bn: True
 data: ../imagenette2
-epochs: 100
+epochs: 50
 gpu: 0
 sgd: True
 no_leaky: False  #False means leaky relu. True mean relu
@@ -10,4 +10,4 @@ subset: 0
 cos: True
 final_lr: 0.0048
 num_hidden: 2
-queue_len: 100
+queue_len: 10000
