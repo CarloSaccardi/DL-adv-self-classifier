@@ -1,11 +1,4 @@
 
-'''
-TODO: Optimizer param group : I need to add it and read about it.
-
-'''
-
-
-
 
 import argparse
 from email.mime import base

@@ -1,4 +1,4 @@
-# wandb: big_run
+wandb: big_run_linear_classifier
 use_bn: True
 data: ../imagenette2
 epochs: 100
@@ -10,4 +10,5 @@ subset: 0
 cos: True
 final_lr: 0.0048
 num_hidden: 2
-queue_len: 100
+queue_len: 10000
+pretrained: ../base_model_files/model_best.pth.tar

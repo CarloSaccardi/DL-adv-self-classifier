@@ -228,6 +228,24 @@ class ProgressMeter(object):
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
+class PrintMultiple(object):
+    def __init__(self, *files):
+        self.files = files
+
+    def write(self, obj):
+        for f in self.files:
+            f.write(obj)
+            f.flush()  # If you want the output to be visible immediately
+
+    def flush(self):
+        for f in self.files:
+            f.flush()
+
+            
+def set_bn_eval(module):
+    if isinstance(module, th.nn.modules.batchnorm._BatchNorm):
+        module.eval()
+
 
 def adjust_lr(optimizer, lr_schedule, iteration):
     for idx, param_group in enumerate(optimizer.param_groups):
