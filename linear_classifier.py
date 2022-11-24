@@ -365,10 +365,11 @@ def sanity_check(state_dict, pretrained_weights):
             continue
 
         # name in pretrained model
+        # print(k)
         # print(k[len('module.'):])
         # k_pre = 'module.backbone.' + k[len('module.'):]
-
-        assert ((state_dict[k].cpu() == state_dict_pre[k]).all()), \
+        k_pre = 'module.backbone.' + k
+        assert ((state_dict[k].cpu() == state_dict_pre[k_pre]).all()), \
             '{} is changed in linear classifier training.'.format(k)
 
     print("=> sanity check passed.")
