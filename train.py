@@ -157,15 +157,14 @@ def parser_func():
 
 def main(args):
     print(args)
-    
     if args.arch in vits.__dict__.keys():
-        if args.moco: 
-            base_model = MoCo_ViT(partial(vits.__dict__[args.arch], stop_grad_conv1=args.stop_grad_conv1),
-                                    args.moco_dim, args.moco_mlp_dim, args.moco_t)
-            backbone_dim = args.moco_dim
-        else:
-            base_model = vits.__dict__[args.arch](patch_size=args.patch_size)
-            backbone_dim = base_model.embed_dim
+        # if args.moco: 
+        #     a=vit_moco.__dict__[args.arch]
+        #     base_model = MoCo_ViT(partial(vit_moco.__dict__[args.arch], stop_grad_conv1=args.stop_grad_conv1),
+        #                             args.moco_dim, args.moco_mlp_dim, args.moco_t)
+        #     backbone_dim = args.moco_dim
+        base_model = vits.__dict__[args.arch](patch_size=args.patch_size, stop_grad_conv1=args.stop_grad_conv1)
+        backbone_dim = base_model.embed_dim
     elif args.arch in torchvision_models.__dict__.keys():
         base_model = torchvision_models.__dict__[args.arch]()
         backbone_dim = base_model.fc.weight.shape[1]

@@ -1,15 +1,16 @@
-# wandb: big_run
-use_bn: True
+# wandb: big_run_vit
 data: ./tiny_dataset
+use_bn: True
 epochs: 100
-sgd: True
-no_leaky: False  #False means leaky relu. True mean relu
-batch_size: 16
+no_leaky: True  #False means leaky relu. True mean relu
+batch_size: 32
 subset: 0
 cos: True
-final_lr: 0.0048
+final_lr: 0.00048
 num_hidden: 2
-queue_len: 100
+queue_len: 10000
 arch: vit_tiny
-moco: True
+sgd: False
+stop_grad_conv1: True
+
 
