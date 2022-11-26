@@ -67,12 +67,11 @@ class Model(nn.Module):
                 idx_crops = th.cumsum(th.unique_consecutive(th.Tensor([inp.shape[-1] for inp in x]), return_counts=True)[1], 0)
                 start_idx = 0
                 for end_idx in idx_crops:
-                    
-                    if moco:
-                        output = self.backbone(th.cat(x[start_idx: end_idx]), th.cat(x[end_idx:-1]))
-                        break
-                    else:
-                        _out = self.backbone(th.cat(x[start_idx: end_idx]))
+                    # if moco:
+                    #     output = self.backbone(th.cat(x[start_idx: end_idx]), th.cat(x[end_idx:-1]))
+                    #     break
+                    # else:
+                    _out = self.backbone(th.cat(x[start_idx: end_idx]))
                         
                     if start_idx == 0:
                         output = _out #shape: (4, 512)
