@@ -105,26 +105,28 @@ def main(args):
     if args.arch in vits.__dict__.keys():
         model = vits.__dict__[args.arch](patch_size=args.patch_size, stop_grad_conv1=args.stop_grad_conv1)
         # creating a linear layer with embed dim and num classes and name it fc
-        model.fc = nn.Linear(model.embed_dim, 10)
-        model.fc.requires_grad = True
+
+
+
+        # model.fc = nn.Linear(model.embed_dim, 10)
+        # model.fc.requires_grad = True
         # classifier = nn.Linear(model.embed_dim, 10, name='fc')
-        # model = nn.Sequential(model, classifier)
     else:
         model = models.__dict__[args.arch]()
 
     # printing the model layers
-    # print(model)
+    print(model)
 
 
     if not args.no_freeze:
         print('=> freezing backbone..')
         # freeze all layers but the last fc
         for name, param in model.named_parameters():
-            if name not in ['fc.weight', 'fc.bias']:
+            if name not in ['head.weight', 'head.bias']:
                 param.requires_grad = False
         # init the fc layer
-        model.fc.weight.data.normal_(mean=0.0, std=0.01)
-        model.fc.bias.data.zero_()
+        model.head.weight.data.normal_(mean=0.0, std=0.01)
+        model.head.bias.data.zero_()
         
     else:
         print('=> backbone is not frozen.')
@@ -152,7 +154,7 @@ def main(args):
 
             args.start_epoch = 0
             msg = model.load_state_dict(state_dict, strict=False)
-            assert set(msg.missing_keys) == {"fc.weight", "fc.bias"}
+            assert set(msg.missing_keys) == {"head.weight", "head.bias"}
             print("=> loaded pre-trained model '{}'".format(args.pretrained))
         else:
             print("=> no checkpoint found at '{}'".format(args.pretrained))
@@ -296,9 +298,11 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
         # compute output
         output = model(images)
+        # print(output.shape)
+        # print(output)
         loss = criterion(output, target)
         # setting loss require grad to True
-        loss = Variable(loss, requires_grad=True)
+        # loss = Variable(loss, requires_grad=True)
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
         losses.update(loss.item(), images.size(0))
@@ -385,7 +389,7 @@ def sanity_check(state_dict, pretrained_weights):
     for k in list(state_dict.keys()):
         # print(k)
         # only ignore fc layer
-        if 'fc.weight' in k or 'fc.bias' in k:
+        if 'head.weight' in k or 'head.bias' in k:
             continue
 
         # name in pretrained model

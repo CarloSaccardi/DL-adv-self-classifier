@@ -211,7 +211,9 @@ class VisionTransformer(nn.Module):
         for blk in self.blocks:
             x = blk(x)
         x = self.norm(x)
-        return x[:, 0]
+        # print(x[:, 0].shape)
+        x = self.head(x[:, 0])
+        return x
 
     def get_last_selfattention(self, x):
         x = self.prepare_tokens(x)
@@ -236,7 +238,7 @@ class VisionTransformer(nn.Module):
 def vit_tiny(patch_size=16, **kwargs):
     model = VisionTransformer(
         patch_size=patch_size, embed_dim=192, depth=12, num_heads=3, mlp_ratio=4,
-        qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), num_classes=10, **kwargs)
     return model
 
 
