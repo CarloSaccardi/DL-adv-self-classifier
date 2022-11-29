@@ -1,6 +1,7 @@
-wandb: big_run_linear_classifier
+wandb: big_run_linear_classifier_vit
 use_bn: True
 data: ../imagenette2
+arch: vit_tiny
 epochs: 100
 gpu: 0
 sgd: True
@@ -11,4 +12,5 @@ cos: True
 final_lr: 0.0048
 num_hidden: 2
 queue_len: 10000
-pretrained: ../model_last.pth.tar
+pretrained: ../model_150.pth.tar
+stop_grad_conv1: True

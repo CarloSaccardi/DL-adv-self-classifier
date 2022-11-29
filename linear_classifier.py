@@ -20,7 +20,11 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
+from torch.autograd import Variable
 import yaml
+import vit as vits
+# import vit_moco as vit_moco 
+# from moco_builder import MoCo_ViT
 
 
 best_acc1 = 0
@@ -70,6 +74,11 @@ def parser_func():
                         help='Do not freeze backbone')
     parser.add_argument("--local_config", default=None, help="config path")
     parser.add_argument("--wandb", default=None, help="Specify project name to log using WandB")
+    parser.add_argument('--patch-size', default=16, type=int,
+                        help="""Size in pixels of input square patches - default 16 (for 16x16 patches). Using smaller 
+                        values leads to better performance but requires more memory. 
+                        Applies only for ViTs (vit_tiny, vit_small and vit_base). If <16, we recommend disabling 
+                        mixed precision training to avoid unstabilities.""")
 
     args = parser.parse_args()
     return args
@@ -93,7 +102,19 @@ def main(args):
 
     # create model
     print("=> creating model '{}'".format(args.arch))
-    model = models.__dict__[args.arch]()
+    if args.arch in vits.__dict__.keys():
+        model = vits.__dict__[args.arch](patch_size=args.patch_size, stop_grad_conv1=args.stop_grad_conv1)
+        # creating a linear layer with embed dim and num classes and name it fc
+        model.fc = nn.Linear(model.embed_dim, 10)
+        model.fc.requires_grad = True
+        # classifier = nn.Linear(model.embed_dim, 10, name='fc')
+        # model = nn.Sequential(model, classifier)
+    else:
+        model = models.__dict__[args.arch]()
+
+    # printing the model layers
+    # print(model)
+
 
     if not args.no_freeze:
         print('=> freezing backbone..')
@@ -104,6 +125,7 @@ def main(args):
         # init the fc layer
         model.fc.weight.data.normal_(mean=0.0, std=0.01)
         model.fc.bias.data.zero_()
+        
     else:
         print('=> backbone is not frozen.')
 
@@ -116,7 +138,7 @@ def main(args):
             # load state dictionary
             state_dict = checkpoint['state_dict']
             # for k in list(state_dict.keys()):
-               #  print(k)
+            #     print(k)
             # remove module. prefix
             for k in list(state_dict.keys()):
                 if k.startswith('backbone.'):
@@ -275,7 +297,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         # compute output
         output = model(images)
         loss = criterion(output, target)
-
+        # setting loss require grad to True
+        loss = Variable(loss, requires_grad=True)
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
         losses.update(loss.item(), images.size(0))
