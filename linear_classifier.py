@@ -115,12 +115,13 @@ def main(args):
 
             # load state dictionary
             state_dict = checkpoint['state_dict']
-
+            # for k in list(state_dict.keys()):
+               #  print(k)
             # remove module. prefix
             for k in list(state_dict.keys()):
-                if k.startswith('module.backbone.'):
+                if k.startswith('backbone.'):
                     # remove prefix
-                    state_dict[k[len("module.backbone."):]] = state_dict[k]
+                    state_dict[k[len("backbone."):]] = state_dict[k]
 
             # remove fc layers
             for k in list(state_dict.keys()):
@@ -368,7 +369,7 @@ def sanity_check(state_dict, pretrained_weights):
         # print(k)
         # print(k[len('module.'):])
         # k_pre = 'module.backbone.' + k[len('module.'):]
-        k_pre = 'module.backbone.' + k
+        k_pre = 'backbone.' + k
         assert ((state_dict[k].cpu() == state_dict_pre[k_pre]).all()), \
             '{} is changed in linear classifier training.'.format(k)
 
