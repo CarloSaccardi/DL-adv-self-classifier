@@ -157,6 +157,7 @@ def parser_func():
 
 def main(args):
     print(args)
+    torch.autograd.set_detect_anomaly(True)
     if args.arch in vits.__dict__.keys():
         # if args.moco: 
         #     a=vit_moco.__dict__[args.arch]
@@ -341,7 +342,7 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
                 probs_ = [[tensor.to(dtype = torch.float32) for tensor in lists] for lists in probs]
                 loss = criterion(probs_)
         
-        assert not torch.isnan(loss), 'loss is nan!'
+        # assert not torch.isnan(loss), 'loss is nan!'
 
         # measure accuracy and record loss
         
