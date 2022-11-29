@@ -182,6 +182,9 @@ def main(args):
                       fixed_cls=args.fixed_cls,
                       no_leaky=args.no_leaky)
     print(model)
+    
+    torch.autograd.set_detect_anomaly(True)
+    
 
 
     nn_queue = utils.NNQueue(args.queue_len, args.dim, args.gpu)
@@ -204,7 +207,8 @@ def main(args):
                                     weight_decay=args.weight_decay)
     else:
         optimizer = torch.optim.AdamW(model.parameters(), args.lr,
-                                      weight_decay=args.weight_decay)
+                                      weight_decay=args.weight_decay, 
+                                      eps = 1e-4)
 
 
 
@@ -348,7 +352,9 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
 
         loss.detach()
         
-        #_ = utils.clip_gradients(model, 0.3)
+        #gradient clipping 
+        if not args.sgd:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
 
         losses.update(loss.item(), probs_[0][0].size(0))
         batch_time.update(time.time() - end)
