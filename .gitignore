@@ -2,4 +2,5 @@
 wandb
 saved/
 self-classifier/
+nohub.out
 
