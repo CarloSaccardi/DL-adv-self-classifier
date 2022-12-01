@@ -10,7 +10,7 @@ import math
 from functools import partial, reduce
 from operator import mul
 
-from timm.models.vision_transformer import VisionTransformer, _cfg
+from timm.models.vision_transformer import VisionTransformer, _cfg, Block, trunc_normal_
 from timm.models.layers.helpers import to_2tuple
 # from timm.models.layers import PatchEmbed
 
@@ -47,8 +47,6 @@ class PatchEmbed(nn.Module):
 
     def forward(self, x):
         B, C, H, W = x.shape
-        _assert(H == self.img_size[0], f"Input image height ({H}) doesn't match model ({self.img_size[0]}).")
-        _assert(W == self.img_size[1], f"Input image width ({W}) doesn't match model ({self.img_size[1]}).")
         x = self.proj(x)
         if self.flatten:
             x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
@@ -57,15 +55,37 @@ class PatchEmbed(nn.Module):
 
 class VisionTransformerMoCo(VisionTransformer):
     def __init__(self, img_size=[224], patch_size=16, in_chans=3, num_classes=0, embed_dim=768, depth=12,
-                 num_heads=12, mlp_ratio=4., qkv_bias=True, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
-                 drop_path_rate=0., norm_layer=nn.LayerNorm, stop_grad_conv1=False, **kwargs):
+                 num_heads=12, mlp_ratio=4., qkv_bias=False, init_values=None, drop_rate=0., attn_drop_rate=0.,
+                 drop_path_rate=0., norm_layer=nn.LayerNorm, act_layer=None, stop_grad_conv1=False, block_fn=Block,**kwargs):
         super().__init__(**kwargs)
         self.num_tokens = 1
+        norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
+        act_layer = act_layer or nn.GELU
         
         # Use fixed 2D sin-cos position embedding
         self.build_2d_sincos_position_embedding()
         
-        self.patch_embed = PatchEmbed(img_size=img_size[0])
+        self.img_size = img_size
+        self.embed_dim = embed_dim
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, self.embed_dim))
+        self.patch_embed = PatchEmbed(img_size=img_size[0], embed_dim = self.embed_dim)
+        self.pos_embed = nn.Parameter(torch.randn(1, self.patch_embed.num_patches + 1, self.embed_dim) * 0.02)
+        
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]
+        self.blocks = nn.Sequential(*[Block(
+                                            dim=embed_dim,
+                                            num_heads=num_heads,
+                                            mlp_ratio=mlp_ratio,
+                                            qkv_bias=qkv_bias,
+                                            init_values=init_values,
+                                            drop=drop_rate,
+                                            attn_drop=attn_drop_rate,
+                                            drop_path=dpr[i],
+                                            norm_layer=norm_layer,
+                                            act_layer=act_layer) for i in range(depth)])
+        
+        self.norm = norm_layer(embed_dim)
+        self.head = nn.Linear(embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
         # weight initialization
         for name, m in self.named_modules():
@@ -109,6 +129,8 @@ class VisionTransformerMoCo(VisionTransformer):
         
     def forward_features(self, x):
         x = self.patch_embed(x)
+        print('############################################')
+        print(x.shape)
         x = self._pos_embed(x)
         x = self.norm_pre(x)
         if self.grad_checkpointing and not torch.jit.is_scripting():
@@ -125,6 +147,8 @@ class VisionTransformerMoCo(VisionTransformer):
         return x if pre_logits else self.head(x)
 
     def forward(self, x):
+        print('############################################')
+        print(x.shape)
         x = self.forward_features(x)
         x = self.forward_head(x)
         return x
