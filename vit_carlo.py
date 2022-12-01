@@ -15,25 +15,21 @@ from timm.models.layers.helpers import to_2tuple
 from timm.models.layers import PatchEmbed
 
 __all__ = [
-    'vit_tiny',
     'vit_small', 
     'vit_base'
 ]
+
 class VisionTransformerMoCo(VisionTransformer):
     def __init__(self, img_size=[224], patch_size=16, in_chans=3, num_classes=0, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=True, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., norm_layer=nn.LayerNorm, stop_grad_conv1=False, **kwargs):
         super().__init__(**kwargs)
-        self.num_classes = num_classes
-        self.num_features = embed_dim
-        self.embed_dim = embed_dim
-        self.patch_embed = PatchEmbed(
-            img_size=img_size[0], patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
         self.num_tokens = 1
-        
         
         # Use fixed 2D sin-cos position embedding
         self.build_2d_sincos_position_embedding()
+        
+        self.patch_embed = PatchEmbed(img_size=img_size[0])
 
         # weight initialization
         for name, m in self.named_modules():
@@ -74,16 +70,31 @@ class VisionTransformerMoCo(VisionTransformer):
         pe_token = torch.zeros([1, 1, self.embed_dim], dtype=torch.float32)
         self.pos_embed = nn.Parameter(torch.cat([pe_token, pos_emb], dim=1))
         self.pos_embed.requires_grad = False
+        
+    def forward_features(self, x):
+        x = self.patch_embed(x)
+        x = self._pos_embed(x)
+        x = self.norm_pre(x)
+        if self.grad_checkpointing and not torch.jit.is_scripting():
+            x = checkpoint_seq(self.blocks, x)
+        else:
+            x = self.blocks(x)
+        x = self.norm(x)
+        return x
+
+    def forward_head(self, x, pre_logits: bool = False):
+        if self.global_pool:
+            x = x[:, self.num_prefix_tokens:].mean(dim=1) if self.global_pool == 'avg' else x[:, 0]
+        x = self.fc_norm(x)
+        return x if pre_logits else self.head(x)
+
+    def forward(self, x):
+        x = self.forward_features(x)
+        x = self.forward_head(x)
+        return x
 
 
 
-def vit_tiny(**kwargs):
-    model = VisionTransformerMoCo(
-        patch_size=16, embed_dim=192, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
-    model.default_cfg = _cfg()
-    return model
-     
 def vit_small(**kwargs):
     model = VisionTransformerMoCo(
         patch_size=16, embed_dim=384, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,

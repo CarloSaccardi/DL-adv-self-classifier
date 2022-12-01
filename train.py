@@ -146,8 +146,6 @@ def parser_func():
 
 def main(args):
     print(args)
-    args.moco = True
-    args.arch = 'vit_tiny'
     if args.arch in vits.__dict__.keys():
         if args.moco:
             base_model = moco.__dict__[args.arch](stop_grad_conv1=args.stop_grad_conv1)
