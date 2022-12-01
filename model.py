@@ -59,7 +59,7 @@ class Model(nn.Module):
                 param.requires_grad = False
                 
                 
-    def forward(self, x, cls_num=None, return_embds=False, moco = False, ):
+    def forward(self, x, cls_num=None, return_embds=False):
         if isinstance(x, list):  # multiple views
             bs_size = x[0].shape[0]
             if return_embds:
@@ -67,12 +67,8 @@ class Model(nn.Module):
                 idx_crops = th.cumsum(th.unique_consecutive(th.Tensor([inp.shape[-1] for inp in x]), return_counts=True)[1], 0)
                 start_idx = 0
                 for end_idx in idx_crops:
-                    # if moco:
-                    #     output = self.backbone(th.cat(x[start_idx: end_idx]), th.cat(x[end_idx:-1]))
-                    #     break
-                    # else:
+                    
                     _out = self.backbone(th.cat(x[start_idx: end_idx]))
-                        
                     if start_idx == 0:
                         output = _out #shape: (4, 512)
                     else:
@@ -80,7 +76,6 @@ class Model(nn.Module):
                     start_idx = end_idx
 
                 # run classification head forward pass on concatenated features
-                
                 embds = self.mlp_head(output)#shape: (batch_size*n_augm, 128)
                 # convert back to list of views
                 embds = [embds[x: x + bs_size] for x in range(0, len(embds), bs_size)]

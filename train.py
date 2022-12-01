@@ -32,8 +32,7 @@ from torch.cuda.amp import autocast, GradScaler
 from model import Model
 import matplotlib.pyplot as plt
 import vit as vits
-import vit_moco as vit_moco 
-from moco_builder import MoCo_ViT
+import vit_carlo as moco
 from functools import partial
 
 # from src.utils import *
@@ -134,22 +133,12 @@ def parser_func():
                         help="""Sample a subset of images for faster training""")
     parser.add_argument('--queue-len', default=262144, type=int,
                     help='length of nearest neighbor queue')
-    parser.add_argument('--moco', default = False, action='store_true',
-                        help='use automatic mixed precision')
     parser.add_argument('--stop-grad-conv1', action='store_true',
                     help='stop-grad after first conv, or patch embedding')
-    parser.add_argument('--moco-dim', default=192, type=int,
-                        help='feature dimension (default: 256)')
-    parser.add_argument('--moco-mlp-dim', default=4096, type=int,
-                        help='hidden dimension in MLPs (default: 4096)')
-    parser.add_argument('--moco-m', default=0.99, type=float,
-                        help='moco momentum of updating momentum encoder (default: 0.99)')
-    parser.add_argument('--moco-m-cos', action='store_true',
-                        help='gradually increase moco momentum to 1 with a '
-                            'half-cycle cosine schedule')
-    parser.add_argument('--moco-t', default=1.0, type=float,
-                        help='softmax temperature (default: 1.0)')
-        
+    parser.add_argument('--clip-grad', type=float, default=0.0,
+                        help="""Threshold for gradient clipping """)
+    parser.add_argument('--moco', action='store_true',
+                    help='use moco transformer backbone')
 
     args = parser.parse_args()
     
@@ -157,14 +146,13 @@ def parser_func():
 
 def main(args):
     print(args)
-    torch.autograd.set_detect_anomaly(True)
     if args.arch in vits.__dict__.keys():
-        # if args.moco: 
-        #     a=vit_moco.__dict__[args.arch]
-        #     base_model = MoCo_ViT(partial(vit_moco.__dict__[args.arch], stop_grad_conv1=args.stop_grad_conv1),
-        #                             args.moco_dim, args.moco_mlp_dim, args.moco_t)
-        #     backbone_dim = args.moco_dim
-        base_model = vits.__dict__[args.arch](patch_size=args.patch_size, stop_grad_conv1=args.stop_grad_conv1)
+        if args.moco:
+            base_model = moco.__dict__[args.arch](patch_size=args.patch_size, 
+                                                  stop_grad_conv1=args.stop_grad_conv1)
+        else:
+            base_model = vits.__dict__[args.arch](patch_size=args.patch_size, 
+                                                  stop_grad_conv1=args.stop_grad_conv1)
         backbone_dim = base_model.embed_dim
     elif args.arch in torchvision_models.__dict__.keys():
         base_model = torchvision_models.__dict__[args.arch]()
@@ -183,9 +171,6 @@ def main(args):
                       fixed_cls=args.fixed_cls,
                       no_leaky=args.no_leaky)
     print(model)
-    
-    torch.autograd.set_detect_anomaly(True)
-    
 
 
     nn_queue = utils.NNQueue(args.queue_len, args.dim, args.gpu)
@@ -193,7 +178,7 @@ def main(args):
 
     if args.gpu is not None:
         print('##### USING THE GPU #####')
-        #torch.autograd.set_detect_anomaly(True)
+        torch.autograd.set_detect_anomaly(True)
         torch.cuda.set_device('cuda:0')
         # DataParallel will divide and allocate batch_size to all available GPUs
         if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
@@ -209,7 +194,7 @@ def main(args):
     else:
         optimizer = torch.optim.AdamW(model.parameters(), args.lr,
                                       weight_decay=args.weight_decay, 
-                                      eps = 1e-4)
+                                      eps = 1e-6)
 
 
 
@@ -321,8 +306,11 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
             
        
         # compute output
+        if not args.sgd:
+            args.use_amp = False
+            
         with autocast(enabled=args.use_amp):
-            embds = model(images, return_embds=True, moco=args.moco)
+            embds = model(images, return_embds=True)
         
             embds1 = embds[0].clone().detach()
 
@@ -330,7 +318,6 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
                 _, nn_targets = nn_queue.get_nn(embds1, indices)
 
                 acc1 = (target.view(-1, ) == nn_targets.view(-1, )).float().mean().view(1, ) * 100.0
-                # print(acc1, acc1[0])
                 top1.update(acc1[0], target.size(0))
     
 
@@ -342,7 +329,7 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
                 probs_ = [[tensor.to(dtype = torch.float32) for tensor in lists] for lists in probs]
                 loss = criterion(probs_)
         
-        # assert not torch.isnan(loss), 'loss is nan!'
+        assert not torch.isnan(loss), 'loss is nan!'
 
         # measure accuracy and record loss
         
@@ -354,13 +341,12 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
         loss.detach()
         
         #gradient clipping 
-        if not args.sgd:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+        if args.clip_grad > 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.clip_grad)
 
         losses.update(loss.item(), probs_[0][0].size(0))
         batch_time.update(time.time() - end)
         end = time.time()
-        
         # measure elapsed time
     
 

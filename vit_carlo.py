@@ -4,9 +4,9 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import math
 import torch
 import torch.nn as nn
+import math
 from functools import partial, reduce
 from operator import mul
 
@@ -15,16 +15,26 @@ from timm.models.layers.helpers import to_2tuple
 from timm.models.layers import PatchEmbed
 
 __all__ = [
+    'vit_tiny',
     'vit_small', 
     'vit_base',
     'vit_conv_small',
     'vit_conv_base',
 ]
-
-
 class VisionTransformerMoCo(VisionTransformer):
-    def __init__(self, stop_grad_conv1=False, **kwargs):
+    def __init__(self, img_size=[224], patch_size=16, in_chans=3, num_classes=0, embed_dim=768, depth=12,
+                 num_heads=12, mlp_ratio=4., qkv_bias=True, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
+                 drop_path_rate=0., norm_layer=nn.LayerNorm, stop_grad_conv1=False, **kwargs):
         super().__init__(**kwargs)
+        self.num_classes = num_classes
+        self.num_features = embed_dim
+        self.embed_dim = embed_dim
+        self.patch_embed = PatchEmbed(
+            img_size=img_size[0], patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
+        self.num_tokens = 1
+        self.embed_dim = embed_dim
+        
+        
         # Use fixed 2D sin-cos position embedding
         self.build_2d_sincos_position_embedding()
 
@@ -67,87 +77,26 @@ class VisionTransformerMoCo(VisionTransformer):
         pe_token = torch.zeros([1, 1, self.embed_dim], dtype=torch.float32)
         self.pos_embed = nn.Parameter(torch.cat([pe_token, pos_emb], dim=1))
         self.pos_embed.requires_grad = False
-        
-
-
-class ConvStem(nn.Module):
-    """ 
-    ConvStem, from Early Convolutions Help Transformers See Better, Tete et al. https://arxiv.org/abs/2106.14881
-    """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, norm_layer=None, flatten=True):
-        super().__init__()
-
-        assert patch_size == 16, 'ConvStem only supports patch size of 16'
-        assert embed_dim % 8 == 0, 'Embed dimension must be divisible by 8 for ConvStem'
-
-        img_size = to_2tuple(img_size)
-        patch_size = to_2tuple(patch_size)
-        self.img_size = img_size
-        self.patch_size = patch_size
-        self.grid_size = (img_size[0] // patch_size[0], img_size[1] // patch_size[1])
-        self.num_patches = self.grid_size[0] * self.grid_size[1]
-        self.flatten = flatten
-
-        # build stem, similar to the design in https://arxiv.org/abs/2106.14881
-        stem = []
-        input_dim, output_dim = 3, embed_dim // 8
-        for l in range(4):
-            stem.append(nn.Conv2d(input_dim, output_dim, kernel_size=3, stride=2, padding=1, bias=False))
-            stem.append(nn.BatchNorm2d(output_dim))
-            stem.append(nn.ReLU(inplace=True))
-            input_dim = output_dim
-            output_dim *= 2
-        stem.append(nn.Conv2d(input_dim, embed_dim, kernel_size=1))
-        self.proj = nn.Sequential(*stem)
-
-        self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
-
-    def forward(self, x):
-        B, C, H, W = x.shape
-        assert H == self.img_size[0] and W == self.img_size[1], \
-            f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
-        x = self.proj(x)
-        if self.flatten:
-            x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
-        x = self.norm(x)
-        return x
 
 
 
 def vit_tiny(patch_size=16, **kwargs):
     model = VisionTransformerMoCo(
-        patch_size=16, embed_dim=192, depth=12, num_heads=3, mlp_ratio=4,
-        qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        embed_dim=192, depth=12, num_heads=3, mlp_ratio=4, qkv_bias=True, 
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     model.default_cfg = _cfg()
     return model
-
-
-def vit_small(**kwargs):
+     
+def vit_small(patch_size=16, **kwargs):
     model = VisionTransformerMoCo(
-        patch_size=16, embed_dim=384, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+        embed_dim=384, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     model.default_cfg = _cfg()
     return model
 
-def vit_base(**kwargs):
+def vit_base(patch_size=16, **kwargs):
     model = VisionTransformerMoCo(
-        patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+        embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     model.default_cfg = _cfg()
-    return model
-
-def vit_conv_small(**kwargs):
-    # minus one ViT block
-    model = VisionTransformerMoCo(
-        patch_size=16, embed_dim=384, depth=11, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), embed_layer=ConvStem, **kwargs)
-    model.default_cfg = _cfg()
-    return model
-
-def vit_conv_base(**kwargs):
-    # minus one ViT block
-    model = VisionTransformerMoCo(
-        patch_size=16, embed_dim=768, depth=11, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), embed_layer=ConvStem, **kwargs)
-    model.default_cfg = _cfg()
-    return model
+    return 
