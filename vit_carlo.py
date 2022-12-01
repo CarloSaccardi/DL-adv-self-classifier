@@ -17,9 +17,7 @@ from timm.models.layers import PatchEmbed
 __all__ = [
     'vit_tiny',
     'vit_small', 
-    'vit_base',
-    'vit_conv_small',
-    'vit_conv_base',
+    'vit_base'
 ]
 class VisionTransformerMoCo(VisionTransformer):
     def __init__(self, img_size=[224], patch_size=16, in_chans=3, num_classes=0, embed_dim=768, depth=12,
@@ -32,7 +30,6 @@ class VisionTransformerMoCo(VisionTransformer):
         self.patch_embed = PatchEmbed(
             img_size=img_size[0], patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
         self.num_tokens = 1
-        self.embed_dim = embed_dim
         
         
         # Use fixed 2D sin-cos position embedding
@@ -80,23 +77,23 @@ class VisionTransformerMoCo(VisionTransformer):
 
 
 
-def vit_tiny(patch_size=16, **kwargs):
+def vit_tiny(**kwargs):
     model = VisionTransformerMoCo(
-        embed_dim=192, depth=12, num_heads=3, mlp_ratio=4, qkv_bias=True, 
+        patch_size=16, embed_dim=192, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     model.default_cfg = _cfg()
     return model
      
-def vit_small(patch_size=16, **kwargs):
+def vit_small(**kwargs):
     model = VisionTransformerMoCo(
-        embed_dim=384, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+        patch_size=16, embed_dim=384, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     model.default_cfg = _cfg()
     return model
 
-def vit_base(patch_size=16, **kwargs):
+def vit_base(**kwargs):
     model = VisionTransformerMoCo(
-        embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+        patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     model.default_cfg = _cfg()
-    return 
+    return model
