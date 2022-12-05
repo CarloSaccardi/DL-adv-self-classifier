@@ -1,21 +1,22 @@
-# wandb: vit_adamW
-data: ./tiny_dataset
+wandb: vit_adamW
+data: ../imagenette2
 use_bn: True
 epochs: 200
 no_leaky: True  #False means leaky relu. True mean relu
-batch_size: 32
+batch_size: 52
 subset: 0
 cos: True
-final_lr: 0.00048
-lr: 0.005
+final_lr: 0.0000048
+lr: 0.0015
 num_hidden: 2
 queue_len: 10000
 arch: vit_small
+gpu: 0
+cos: True
+moco: True
 sgd: False
 stop_grad_conv1: True
 warmup_epochs: 20
-gpu: 0
 wd: 0.1
-cos: True
-moco: True
+weight_decay: 0.000001
 

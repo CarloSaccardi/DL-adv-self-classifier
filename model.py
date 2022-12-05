@@ -71,7 +71,6 @@ class Model(nn.Module):
                     if start_idx == 0:
                         output = _out #shape: (4, 512)
                     else:
-                        print('YOU HAVE TO BE KIDDING ME')
                         output = th.cat((output, _out))#shape: (batch_size*n_augm, 512)
                     start_idx = end_idx
 
