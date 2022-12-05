@@ -8,6 +8,7 @@ import math
 import urllib.request
 import torch.distributed as dist
 from torchvision import transforms, datasets
+from rembg import remove
 
 from PIL import Image, ImageFilter, ImageOps
 
@@ -65,9 +66,22 @@ class Solarization(object):
             return img
 
 
+# class to remove bg using rembg
+class RemoveBG(object):
+    def __init__(self, removebg = True, p = 0.1):
+        self.p = p
+        self.removebg = removebg
+
+    def __call__(self, img):
+        if self.removebg:
+            if random.random() < self.p:
+                return remove(img)
+        return img
+    
+
 class DataAugmentation(object):
     # taken from DINO
-    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number):
+    def __init__(self, global_crops_scale, local_crops_scale, local_crops_number, remove_bg, remove_bg_percent):
         flip_and_color_jitter = transforms.Compose([
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomApply(
@@ -82,11 +96,14 @@ class DataAugmentation(object):
         ])
 
         # first global crop
+        
         self.global_transfo1 = transforms.Compose([
             transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),
             flip_and_color_jitter,
             GaussianBlur(0.1),
+            RemoveBG(remove_bg, remove_bg_percent),
             normalize,
+
         ])
         # second global crop
         self.global_transfo2 = transforms.Compose([
@@ -94,6 +111,7 @@ class DataAugmentation(object):
             flip_and_color_jitter,
             GaussianBlur(1.0),
             Solarization(0.2),
+            RemoveBG(remove_bg, remove_bg_percent),
             normalize,
         ])
         # transformation for the local small crops

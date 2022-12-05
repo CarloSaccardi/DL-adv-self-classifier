@@ -132,6 +132,9 @@ def parser_func():
     parser.add_argument('--queue-len', default=262144, type=int,
                     help='length of nearest neighbor queue')
 
+    parser.add_argument('--removebg', action='store_true',default=True)
+    parser.add_argument('--removebg-percent', type=float, default=0.1)
+
     args = parser.parse_args()
     
     return args
@@ -209,7 +212,7 @@ def main(args):
     cudnn.benchmark = True
 
     traindir = os.path.join(args.data, 'train')
-    transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number)
+    transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number, args.removebg, args.removebg_percent)
     dataset = utils.ImageFolderWithIndices(traindir, transform=transform)
     loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
     
