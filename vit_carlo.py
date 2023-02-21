@@ -156,10 +156,7 @@ class VisionTransformerMoCo(VisionTransformer):
         x = torch.cat((self.cls_token.expand(B, -1, -1), x), dim=1)
         x = x + self.interpolate_pos_encoding(x, w, h)
         x = self.norm_pre(x)
-        if self.grad_checkpointing and not torch.jit.is_scripting():
-            x = checkpoint_seq(self.blocks, x)
-        else:
-            x = self.blocks(x)
+        x = self.blocks(x)
         x = self.norm(x)
         return x
 

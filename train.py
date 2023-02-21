@@ -34,6 +34,7 @@ import matplotlib.pyplot as plt
 import vit as vits
 import vit_carlo as moco
 from functools import partial
+from LARC_optimizer import LARC
 
 # from src.utils import *
 
@@ -55,11 +56,11 @@ def parser_func():
     parser.add_argument('--gpu', default=None, type=int) 
     parser.add_argument('--lr', '--learning-rate', default=4.8, type=float,
                         metavar='LR', help='initial learning rate', dest='lr')
-    parser.add_argument('--cos', action='store_true',
+    parser.add_argument('--cos', type=bool, default=True,
                         help='use cosine lr schedule')
-    parser.add_argument('--sgd', action='store_true',
+    parser.add_argument('--sgd', type=bool, default=True,
                         help='use SGD optimizer')
-    parser.add_argument('--lars', action='store_true',
+    parser.add_argument('--lars',type=bool, default=True,
                         help='use LARS optimizer')
     parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                         help='momentum')
@@ -84,15 +85,15 @@ def parser_func():
                         help='size of MLP embedding layer')
     parser.add_argument('--hidden-dim', default=4096, type=int, metavar='HDIM',
                         help='size of MLP hidden layer')
-    parser.add_argument('--num-hidden', default=3, type=int,
+    parser.add_argument('--num-hidden', default=2, type=int,
                         help='number of MLP hidden layers')
     parser.add_argument('--use-amp', default = True, action='store_true',
                         help='use automatic mixed precision')
-    parser.add_argument('--use-bn', action='store_true',
+    parser.add_argument('--use-bn', type=bool, default=True,
                         help='use batch normalization layers in MLP')
     parser.add_argument('--fixed-cls', action='store_true',
                         help='use a fixed classifier')
-    parser.add_argument('--no-leaky', action='store_true',
+    parser.add_argument('--no-leaky', type=bool, default=False,
                         help='use regular relu layers instead of leaky relu in MLP')
     parser.add_argument('--row-tau', default=0.1, type=float,
                     help='row softmax temperature (default: 0.1)')
@@ -100,7 +101,7 @@ def parser_func():
                     help='column softmax temperature (default: 0.05)')
     parser.add_argument('--eps', type=float, default=1e-8,
                     help='small value to avoid division by zero and log(0)')
-    parser.add_argument('--final-lr', default=None, type=float,
+    parser.add_argument('--final-lr', default=0.0048, type=float,
                     help='final learning rate (None for constant learning rate)')
     parser.add_argument('--warmup-epochs', default=10, type=int,
                     help='linear warmup epochs (default: 10)')
@@ -133,7 +134,7 @@ def parser_func():
                         help="""Sample a subset of images for faster training""")
     parser.add_argument('--queue-len', default=262144, type=int,
                     help='length of nearest neighbor queue')
-    parser.add_argument('--stop-grad-conv1', action='store_true',
+    parser.add_argument('--stop-grad-conv1', type=bool, default=False,
                     help='stop-grad after first conv, or patch embedding')
     parser.add_argument('--clip-grad', type=float, default=0.0,
                         help="""Threshold for gradient clipping """)
@@ -146,11 +147,14 @@ def parser_func():
 
 def main(args):
     print(args)
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
     if args.arch in vits.__dict__.keys():
         if args.moco:
-            base_model = moco.__dict__[args.arch](stop_grad_conv1=args.stop_grad_conv1)
+            base_model = moco.__dict__[args.arch](stop_grad_conv1=args.stop_grad_conv1) #from vit-carlo
         else:
-            base_model = vits.__dict__[args.arch](patch_size=args.patch_size, 
+            base_model = vits.__dict__[args.arch](patch_size=args.patch_size,           #from vit-original
                                                   stop_grad_conv1=args.stop_grad_conv1)
         backbone_dim = base_model.embed_dim
     elif args.arch in torchvision_models.__dict__.keys():
@@ -160,8 +164,8 @@ def main(args):
         raise Exception("Unknown architecture: {}".format(args.arch))
     
     model = Model(base_model=base_model,
-                      dim=args.dim,
-                      hidden_dim=args.hidden_dim,
+                      dim=args.dim,#first layer of MLP
+                      hidden_dim=args.hidden_dim,#second layer of MLP
                       cls_size=args.cls_size,
                       num_cls=args.num_cls,
                       num_hidden=args.num_hidden,
@@ -169,7 +173,6 @@ def main(args):
                       backbone_dim=backbone_dim,
                       fixed_cls=args.fixed_cls,
                       no_leaky=args.no_leaky)
-    print(model)
 
 
     nn_queue = utils.NNQueue(args.queue_len, args.dim, args.gpu)
@@ -178,13 +181,12 @@ def main(args):
     if args.gpu is not None:
         print('##### USING THE GPU #####')
         torch.autograd.set_detect_anomaly(True)
-        torch.cuda.set_device('cuda:0')
         # DataParallel will divide and allocate batch_size to all available GPUs
         if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
             model.features = torch.nn.DataParallel(model.features)
-            model.cuda()
+            model.to(device)
         else:
-            model = model.cuda()   
+            model = model.to(device) 
 
     if args.sgd:
         optimizer = torch.optim.SGD(model.parameters(), args.lr,
@@ -194,7 +196,9 @@ def main(args):
         optimizer = torch.optim.AdamW(model.parameters(), args.lr,
                                       weight_decay=args.weight_decay, 
                                       eps = 1e-6)
-
+        
+    if args.lars:
+        optimizer = LARC(optimizer=optimizer, trust_coefficient=0.001, clip=False)
 
 
     if args.resume:
@@ -222,13 +226,8 @@ def main(args):
     traindir = os.path.join(args.data, 'train')
     transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number)
     dataset = utils.ImageFolderWithIndices(traindir, transform=transform)
-    loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+    loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)#pin_memory=True)
     
-    if args.subset > 0:       
-        #sample a subset of the dataset for faster training
-        indices = np.random.choice(len(dataset), size=args.subset, replace=False)
-        data_subset = torch.utils.data.Subset(dataset, indices)
-        loader = torch.utils.data.DataLoader(data_subset, batch_size=args.batch_size, shuffle=True, drop_last=True)
 
     criterion = Loss(row_tau=args.row_tau, col_tau=args.col_tau, eps=args.eps)
     
@@ -245,7 +244,7 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
 
         # train for one epoch
-        loss_i, acc1 = train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, epoch, args)
+        loss_i, acc1 = train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, epoch, args, device)
         if args.wandb:
             wandb.log({"Train Loss": loss_i, "Train Acc": acc1})
         print("##################################################")
@@ -271,9 +270,9 @@ def main(args):
 
 
 
-def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, epoch, args):#add scaler as input when using GPU
+def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, epoch, args, device):#add scaler as input when using GPU
     
-    batch_time = utils.AverageMeter('Time', ':6.3f')
+    batch_time = utils.AverageMeter('Time', ':6.3f') 
     data_time = utils.AverageMeter('Data', ':6.3f')
     losses = utils.AverageMeter('Loss', ':.4e')
     top1 = utils.AverageMeter('Acc@1', ':6.6f')
@@ -288,6 +287,10 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
     for i, (images, target, indices) in enumerate(loader):
 
         data_time.update(time.time() - end)
+        
+        images = [x.to(device) for x in images]
+        target = [x.to(device) for x in target]
+        indices = [x.to(device) for x in indices] 
 
         # adjust learning rate
         if args.cos:
@@ -297,20 +300,13 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
 
         optimizer.zero_grad()
         
-        if args.gpu is not None:
-            #print('##### LOADING ALL IMAGES ONTO THE GPU #####')
-            images = [x.cuda(args.gpu, non_blocking=True) for x in images]
-            target = target.cuda(args.gpu, non_blocking=True)  # only used for monitoring progress, NOT for training
-            indices = indices.cuda(args.gpu, non_blocking=True)
-            
        
         # compute output
         if not args.sgd:
             args.use_amp = False
             
-        with autocast(enabled=args.use_amp):
+        with autocast():
             embds = model(images, return_embds=True)
-        
             embds1 = embds[0].clone().detach()
 
             if nn_queue.full:
@@ -318,32 +314,28 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
 
                 acc1 = (target.view(-1, ) == nn_targets.view(-1, )).float().mean().view(1, ) * 100.0
                 top1.update(acc1[0], target.size(0))
-    
 
             nn_queue.push(embds1, target, indices)
             probs = model(embds, return_embds=False)
-
-            with autocast(enabled=False):
-                # compute loss
-                probs_ = [[tensor.to(dtype = torch.float32) for tensor in lists] for lists in probs]
-                loss = criterion(probs_)
+            loss = criterion(probs)
         
         assert not torch.isnan(loss), 'loss is nan!'
 
-        # measure accuracy and record loss
         
         # compute gradient and do SGD step
         scaler.scale(loss).backward()
+
+        if args.clip_grad > 0:
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.clip_grad)
+            
         scaler.step(optimizer)
         scaler.update()
 
         loss.detach()
         
-        #gradient clipping 
-        if args.clip_grad > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.clip_grad)
 
-        losses.update(loss.item(), probs_[0][0].size(0))
+        losses.update(loss.item(), probs[0][0].size(0))
         batch_time.update(time.time() - end)
         end = time.time()
         # measure elapsed time

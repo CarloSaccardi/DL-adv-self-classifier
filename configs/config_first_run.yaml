@@ -1,16 +1,9 @@
-wandb: original_parameters
-data: ../imagenette2
-use_bn: True
-epochs: 400
-no_leaky: False  #False means leaky relu. True mean relu
+arch: vit_small
 batch_size: 16
-cos: True
-final_lr: 0.0048
-lr: 4.8
-num_hidden: 2
-queue_len: 10000
-arch: resnet18
+clip_grad: 0 #lipping with norm .3 ~ 1.0 can  help optimization for larger ViT architectures. 0 for disabling.
+epochs: 400
 gpu: 0
-cos: True
-sgd: True
-
+moco: True
+queue_len: 10000
+stop_grad_conv1: True
+wandb: new-submission-TRYOUT

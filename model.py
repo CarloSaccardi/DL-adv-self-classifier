@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "self-classifier")) 
-from src.utils import trunc_normal_
+from utils import trunc_normal_
 #In this file we will develop the model by using ResNet-18 as the backbone
 
 
@@ -135,6 +135,7 @@ class MLPHead(nn.Module):
                 else:
                     layers.append(nn.LeakyReLU(inplace=True))
             layers.append(nn.Linear(hidden_dim, out_dim))
+            layers.append(nn.LayerNorm(out_dim))
             self.mlp = nn.Sequential(*layers)
         self.apply(self._init_weights)
 
@@ -149,3 +150,5 @@ class MLPHead(nn.Module):
         x = self.mlp(x)
         x = F.normalize(x, p=2, dim=1, eps=1e-7)
         return x
+    
+    

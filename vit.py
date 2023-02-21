@@ -16,7 +16,7 @@ import os
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "self-classifier")) 
-from src.utils import trunc_normal_
+from utils import trunc_normal_
 
 
 def drop_path(x, drop_prob: float = 0., training: bool = False):
