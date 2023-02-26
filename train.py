@@ -20,6 +20,7 @@ import wandb
 
 from loss import Loss
 import torch
+import torchvision
 import torch.optim
 import torch.backends.cudnn as cudnn
 import torch.utils.data
@@ -140,6 +141,8 @@ def parser_func():
                         help="""Threshold for gradient clipping """)
     parser.add_argument('--moco', action='store_true',
                     help='use moco transformer backbone')
+    parser.add_argument('cifar10', type=bool, default=False, help='use cifar10 dataset')
+    parser.add_argument('cifar10_root', type=str, default='./data', help='cifar10 root path')
 
     args = parser.parse_args()
     
@@ -225,7 +228,11 @@ def main(args):
 
     traindir = os.path.join(args.data, 'train')
     transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number)
-    dataset = utils.ImageFolderWithIndices(traindir, transform=transform)
+    if args.cifar10:
+        assert args.gpu > 0, "CIFAR10 is only available with GPU"
+        dataset = torchvision.datasets.CIFAR10(root=args.cifar10_root, train=True, download=True, transform=transform)
+    else:
+        dataset = utils.ImageFolderWithIndices(traindir, transform=transform)
     loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)#pin_memory=True)
     
 
@@ -362,6 +369,8 @@ def update_args(args, config_dict):
 if __name__ == '__main__':
     
     args = parser_func()
+    
+    args.local_config = "configs/config_first_run.yaml"
     
     if args.local_config is not None:
         with open(str(args.local_config), "r") as f:
