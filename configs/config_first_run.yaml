@@ -1,10 +1,17 @@
 arch: vit_small
-batch_size: 16
+batch_size: 56
+epochs: 120
+sgd: False
+lars: False
+num_hidden: 3
+
 clip_grad: 0 #clipping with norm .3 ~ 1.0 can  help optimization for larger ViT architectures. 0 for disabling.
 epochs: 400
-gpu: 0
+gpu: 1
 moco: False
 queue_len: 10000
 stop_grad_conv1: True
-num_hidden: 3
 wandb: new-submission-TRYOUT
+
+cifar10_root: ../cifar10
+cifar10: True

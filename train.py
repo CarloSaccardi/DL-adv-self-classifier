@@ -10,10 +10,8 @@ TODO: Optimizer param group : I need to add it and read about it.
 import argparse
 from email.mime import base
 import os
-import random
 import shutil
 import time
-import sys
 import yaml
 import warnings
 import wandb
@@ -139,7 +137,7 @@ def parser_func():
                     help='stop-grad after first conv, or patch embedding')
     parser.add_argument('--clip-grad', type=float, default=0.0,
                         help="""Threshold for gradient clipping """)
-    parser.add_argument('--moco', action='store_true',
+    parser.add_argument('--moco',type=bool, default=False,
                     help='use moco transformer backbone')
     parser.add_argument('cifar10', type=bool, default=False, help='use cifar10 dataset')
     parser.add_argument('cifar10_root', type=str, default='./data', help='cifar10 root path')
@@ -150,6 +148,8 @@ def parser_func():
 
 def main(args):
     print(args)
+    
+    args.lr = args.lr * args.batch_size / 256
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
