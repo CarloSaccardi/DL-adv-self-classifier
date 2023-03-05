@@ -1,0 +1,7 @@
+wandb: Currently logged in as: carlo_saccardi (self-classifier). Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.13.10
+wandb: Run data is saved locally in /home/carlo/DL-adv-self-classifier/wandb/run-20230305_170152-f5873n45
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run azure-dew-1
+wandb: ⭐️ View project at https://wandb.ai/self-classifier/new-submission-Transformer
+wandb: 🚀 View run at https://wandb.ai/self-classifier/new-submission-Transformer/runs/f5873n45

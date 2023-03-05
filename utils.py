@@ -6,6 +6,10 @@ import torch as th
 import random
 import math
 import urllib.request
+
+import torch
+import torchvision
+
 import torch.distributed as dist
 from torchvision import transforms, datasets
 
@@ -67,6 +71,13 @@ def cosine_scheduler_with_warmup(base_value, final_value, epochs, niter_per_ep, 
     schedule = np.concatenate((warmup_schedule, schedule))
     assert len(schedule) == epochs * niter_per_ep
     return schedule
+
+
+
+class CIFAR10WithIndices(torchvision.datasets.CIFAR10):
+    def __getitem__(self, index):
+        img, target = super().__getitem__(index)
+        return img, target, index
 
     
 class GaussianBlur(object):

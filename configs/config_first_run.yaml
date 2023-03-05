@@ -7,11 +7,11 @@ num_hidden: 3
 
 clip_grad: 0 #clipping with norm .3 ~ 1.0 can  help optimization for larger ViT architectures. 0 for disabling.
 epochs: 400
-gpu: 1
+gpu: 0
 moco: False
 queue_len: 10000
-stop_grad_conv1: True
-wandb: new-submission-TRYOUT
+stop_grad_conv1: False
+wandb: new-submission-Transformer
 
 cifar10_root: ../cifar10
 cifar10: True

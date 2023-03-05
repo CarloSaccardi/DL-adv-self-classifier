@@ -135,13 +135,6 @@ class MLPHead(nn.Module):
                 else:
                     layers.append(nn.LeakyReLU(inplace=True))
             layers.append(nn.Linear(hidden_dim, out_dim))
-            if use_bn:
-                layers.append(nn.BatchNorm1d(hidden_dim))
-            if no_leaky:
-                layers.append(nn.ReLU(inplace=True))
-            else:
-                layers.append(nn.LeakyReLU(inplace=True))
-            layers.append(nn.LayerNorm(out_dim))
             self.mlp = nn.Sequential(*layers)
         self.apply(self._init_weights)
 

@@ -34,6 +34,7 @@ import vit as vits
 import vit_carlo as moco
 from functools import partial
 from LARC_optimizer import LARC
+from utils import CIFAR10WithIndices
 
 # from src.utils import *
 
@@ -139,8 +140,8 @@ def parser_func():
                         help="""Threshold for gradient clipping """)
     parser.add_argument('--moco',type=bool, default=False,
                     help='use moco transformer backbone')
-    parser.add_argument('cifar10', type=bool, default=False, help='use cifar10 dataset')
-    parser.add_argument('cifar10_root', type=str, default='./data', help='cifar10 root path')
+    parser.add_argument('--cifar10', type=bool, default=False, help='use cifar10 dataset')
+    parser.add_argument('--cifar10_root', type=str, default='./data', help='cifar10 root path')
 
     args = parser.parse_args()
     
@@ -229,8 +230,10 @@ def main(args):
     traindir = os.path.join(args.data, 'train')
     transform = utils.DataAugmentation(args.global_crops_scale, args.local_crops_scale, args.local_crops_number)
     if args.cifar10:
-        assert args.gpu > 0, "CIFAR10 is only available with GPU"
-        dataset = torchvision.datasets.CIFAR10(root=args.cifar10_root, train=True, download=True, transform=transform)
+        assert args.gpu is not None, "CIFAR10 is only available with GPU"
+        dataset = CIFAR10WithIndices(root=args.cifar10_root, train=True, download=True, transform=transform)
+        #print where the dataset is
+        print(  'CIFAR10 dataset is located at: ', dataset.root )
     else:
         dataset = utils.ImageFolderWithIndices(traindir, transform=transform)
     loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)#pin_memory=True)
@@ -294,10 +297,6 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
     for i, (images, target, indices) in enumerate(loader):
 
         data_time.update(time.time() - end)
-        
-        images = [x.to(device) for x in images]
-        target = [x.to(device) for x in target]
-        indices = [x.to(device) for x in indices] 
 
         # adjust learning rate
         if args.cos:
@@ -307,13 +306,20 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
 
         optimizer.zero_grad()
         
+        if args.gpu is not None:
+            #print('##### LOADING ALL IMAGES ONTO THE GPU #####')
+            images = [x.cuda(args.gpu, non_blocking=True) for x in images]
+            target = target.cuda(args.gpu, non_blocking=True)  # only used for monitoring progress, NOT for training
+            indices = indices.cuda(args.gpu, non_blocking=True)
+            
        
         # compute output
         if not args.sgd:
             args.use_amp = False
             
-        with autocast():
+        with autocast(enabled=args.use_amp):
             embds = model(images, return_embds=True)
+        
             embds1 = embds[0].clone().detach()
 
             if nn_queue.full:
@@ -321,10 +327,15 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
 
                 acc1 = (target.view(-1, ) == nn_targets.view(-1, )).float().mean().view(1, ) * 100.0
                 top1.update(acc1[0], target.size(0))
+    
 
             nn_queue.push(embds1, target, indices)
             probs = model(embds, return_embds=False)
-            loss = criterion(probs)
+
+            with autocast(enabled=False):
+                # compute loss
+                probs_ = [[tensor.to(dtype = torch.float32) for tensor in lists] for lists in probs]
+                loss = criterion(probs_)
         
         assert not torch.isnan(loss), 'loss is nan!'
 
@@ -371,6 +382,7 @@ if __name__ == '__main__':
     args = parser_func()
     
     args.local_config = "configs/config_first_run.yaml"
+    
     
     if args.local_config is not None:
         with open(str(args.local_config), "r") as f:
