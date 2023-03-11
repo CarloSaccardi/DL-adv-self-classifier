@@ -1,16 +1,18 @@
-arch: vit_small
-batch_size: 56
+arch: vit_tiny
+batch_size: 32
 epochs: 120
-sgd: False
+sgd: True
 lars: False
-num_hidden: 3
-
+num_hidden: 2
+warmup_epochs: 20
+final_lr: 0.00048
 clip_grad: 0 #clipping with norm .3 ~ 1.0 can  help optimization for larger ViT architectures. 0 for disabling.
-epochs: 400
+lr: 0.1
+no_leaky: True
 gpu: 0
 moco: False
 queue_len: 10000
-stop_grad_conv1: False
+stop_grad_conv1: True
 wandb: new-submission-Transformer
 
 cifar10_root: ../cifar10

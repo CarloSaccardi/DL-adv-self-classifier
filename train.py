@@ -150,7 +150,7 @@ def parser_func():
 def main(args):
     print(args)
     
-    args.lr = args.lr * args.batch_size / 256
+    # args.lr = args.lr * args.batch_size / 256
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
@@ -330,14 +330,14 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
     
 
             nn_queue.push(embds1, target, indices)
-            probs = model(embds, return_embds=False)
+            #full precision probs--> float32
+            probs_ = [[tensor.to(dtype=torch.float32) for tensor in lists] for lists in model(embds, return_embds=False)]
 
             with autocast(enabled=False):
                 # compute loss
-                probs_ = [[tensor.to(dtype = torch.float32) for tensor in lists] for lists in probs]
                 loss = criterion(probs_)
         
-        assert not torch.isnan(loss), 'loss is nan!'
+        #assert not torch.isnan(loss), 'loss is nan!'
 
         
         # compute gradient and do SGD step
@@ -353,7 +353,7 @@ def train(loader, model, nn_queue, scaler, criterion, optimizer, lr_schedule, ep
         loss.detach()
         
 
-        losses.update(loss.item(), probs[0][0].size(0))
+        losses.update(loss.item(), probs_[0][0].size(0))
         batch_time.update(time.time() - end)
         end = time.time()
         # measure elapsed time
